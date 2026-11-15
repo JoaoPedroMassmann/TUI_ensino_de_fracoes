@@ -7,7 +7,7 @@ import logging
 import cv2
 
 from . import config
-from .avaliacao import total_oitavos
+from .avaliacao import Leitura
 from .deteccao import Estabilizador, criar_detector
 from .estado import Sessao
 from .fala import Falador, tts_disponivel
@@ -29,7 +29,7 @@ def ler_tecla(codigo: int) -> str:
         return ""
 
 
-def tratar_tecla(tecla: str, sessao: Sessao, ids_validos: list[int], total: int) -> bool:
+def tratar_tecla(tecla: str, sessao: Sessao, leitura: Leitura) -> bool:
     """Executa o comando da tecla. Devolve False quando o usuário pediu para sair."""
     if tecla == "q":
         return False
@@ -40,11 +40,12 @@ def tratar_tecla(tecla: str, sessao: Sessao, ids_validos: list[int], total: int)
     elif tecla == "p":
         sessao.repetir_pergunta()
     elif tecla in ("s", " "):
-        sessao.verificar_ou_avancar(ids_validos, total)
+        sessao.verificar_ou_avancar(leitura)
     return True
 
-"""Função principal do programa."""
+
 def main() -> int:
+    """Função principal do programa."""
     logging.basicConfig(level=logging.INFO, format="%(message)s")
     logger.info("Iniciando o Sistema Educativo de Frações...")
 
@@ -81,16 +82,16 @@ def main() -> int:
             ids_detectados = ids.flatten().tolist() if ids is not None else []
             ids_do_quadro = [i for i in ids_detectados if i in config.ID_VALUES_MAP]
             ids_validos = estabilizador.atualizar(ids_do_quadro)
-            total = total_oitavos(ids_validos)
+            leitura = Leitura(ids_validos, estabilizador.oscilando)
 
             tecla = ler_tecla(cv2.waitKey(1))
-            if not tratar_tecla(tecla, sessao, ids_validos, total):
+            if not tratar_tecla(tecla, sessao, leitura):
                 break
 
             display = frame.copy()
             if ids is not None:
                 cv2.aruco.drawDetectedMarkers(display, corners, ids)
-            display = desenhar_interface(display, sessao.estado, ids_validos, total)
+            display = desenhar_interface(display, sessao.estado, leitura.ids, leitura.total)
             cv2.imshow(config.JANELA_TITULO, display)
     finally:
         falador.parar()

@@ -21,11 +21,7 @@ def criar_detector() -> cv2.aruco.ArucoDetector:
 
 
 class Estabilizador:
-    """Decide quais peças estão na mesa olhando os últimos quadros.
-
-    Para cada ID, vale a quantidade de peças vista na maioria dos quadros recentes. Assim,
-    um quadro em que a câmera perdeu uma tag não derruba a leitura.
-    """
+    """Decide quais peças estão na mesa olhando os últimos quadros."""
 
     def __init__(self, janela: int = config.FRAMES_ESTABILIDADE) -> None:
         self._historico: deque[Counter] = deque(maxlen=janela)
@@ -41,6 +37,14 @@ class Estabilizador:
             contagem = max(v for v, n in frequencia.items() if n == melhor)
             estaveis.extend([tag_id] * contagem)
         return estaveis
+
+    @property
+    def oscilando(self) -> bool:
+        """True se pelo menos 2 quadros da janela divergem da leitura mais comum."""
+        if len(self._historico) < 2:
+            return False
+        padroes = Counter(tuple(sorted(h.items())) for h in self._historico)
+        return len(self._historico) - max(padroes.values()) >= 2
 
     def limpar(self) -> None:
         self._historico.clear()

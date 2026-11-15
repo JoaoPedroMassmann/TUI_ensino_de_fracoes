@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 from . import config
 from .atividades import FASES, Fase, Questao
-from .avaliacao import avaliar
+from .avaliacao import Leitura, avaliar
 
 INSTRUCAO = "Posicione as peças diante da câmera e aperte a tecla espaço para verificar."
 
@@ -35,6 +35,7 @@ class EstadoSistema:
     fase: int = 1
     questao_atual: int = 0
     resolvida: bool = False
+    tentativas: int = 0
     rotulo: str | None = None
     cor: tuple[int, int, int] = config.BRANCO
     mensagem: str = INSTRUCAO
@@ -73,6 +74,7 @@ class Sessao:
         mensagem_falada = texto
         if repetir_enunciado:
             mensagem_falada = f"{texto} Repetindo o enunciado: {com_ponto(e.questao.enunciado)}"
+        self.falador.bipe(tipo)
         self.falador.falar(" ".join(p for p in (falado, mensagem_falada) if p))
 
     def anunciar_questao(self, abertura: str = "") -> None:
@@ -87,30 +89,39 @@ class Sessao:
     def trocar_fase(self, fase: int, abertura_extra: str = "") -> None:
         self.estado.fase = fase
         self.estado.questao_atual = 0
-        self.estado.resolvida = False
+        self._zerar_questao()
         abertura = f"{abertura_extra} {titulo_falado(self.estado.fase_atual)}".strip()
         self.anunciar_questao(abertura=abertura)
 
-    def reiniciar_questao(self) -> None:
+    def _zerar_questao(self) -> None:
         self.estado.resolvida = False
+        self.estado.tentativas = 0
+
+    def reiniciar_questao(self) -> None:
+        self._zerar_questao()
         self.definir_feedback("info", "Questão reiniciada. " + INSTRUCAO)
 
     def repetir_pergunta(self) -> None:
         self.falador.falar(self.fala_questao())
 
-    def verificar_ou_avancar(self, ids_validos: list[int], total: int) -> None:
+    def verificar_ou_avancar(self, leitura: Leitura) -> None:
         e = self.estado
-        if not e.resolvida:
-            resultado = avaliar(e.questao, ids_validos, total)
-            e.resolvida = resultado.tipo == "ok"
-            self.definir_feedback(
-                resultado.tipo, resultado.texto, repetir_enunciado=resultado.repetir_enunciado
-            )
+        if e.resolvida:
+            self._avancar()
             return
+        resultado = avaliar(e.questao, leitura, tentativa=e.tentativas + 1)
+        if resultado.tipo == "erro":  # "nenhuma peça" (aviso) não conta como tentativa
+            e.tentativas += 1
+        e.resolvida = resultado.tipo == "ok"
+        self.definir_feedback(
+            resultado.tipo, resultado.texto, repetir_enunciado=resultado.repetir_enunciado
+        )
 
+    def _avancar(self) -> None:
+        e = self.estado
         if e.questao_atual + 1 < len(e.fase_atual.questoes):
             e.questao_atual += 1
-            e.resolvida = False
+            self._zerar_questao()
             self.anunciar_questao()
         elif e.fase + 1 in FASES:
             self.trocar_fase(e.fase + 1, abertura_extra="Fase concluída! Avançando para")

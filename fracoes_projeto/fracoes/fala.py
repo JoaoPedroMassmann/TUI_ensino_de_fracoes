@@ -29,6 +29,29 @@ _SCRIPT_TTS = (
 )
 
 
+# tipo de feedback -> sequência de (frequência em Hz, duração em ms)
+_PADROES_BIPE = {
+    "ok": ((660, 120), (880, 160)),
+    "parabens": ((660, 120), (880, 120), (1100, 240)),
+    "erro": ((220, 350),),
+    "aviso": ((440, 120), (440, 120)),
+}
+
+
+def _tocar_bipe(padrao: tuple[tuple[int, int], ...]) -> None:
+    try:
+        import winsound
+    except ImportError:
+        sys.stdout.write("\a")
+        sys.stdout.flush()
+        return
+    try:
+        for frequencia, duracao in padrao:
+            winsound.Beep(frequencia, duracao)
+    except RuntimeError:
+        logger.exception("Não foi possível tocar o bipe")
+
+
 def tts_disponivel() -> bool:
     return importlib.util.find_spec("pyttsx3") is not None
 
@@ -40,8 +63,10 @@ class Falador:
         habilitado: bool = True,
         taxa: int = config.TTS_TAXA,
         dicas_voz: tuple[str, ...] = config.TTS_VOZ_DICAS,
+        bipes: bool = True,
     ) -> None:
         self._habilitado = habilitado
+        self._bipes = bipes
         self._taxa = taxa
         self._dicas_voz = tuple(dicas_voz)
         self._fila: queue.Queue[tuple[int, str]] = queue.Queue()
@@ -64,6 +89,12 @@ class Falador:
             self._terminar_processo()
             geracao = self._geracao
         self._fila.put((geracao, texto))
+
+    def bipe(self, tipo: str) -> None:
+        """Toca um sinal curto, que responde na hora enquanto a voz ainda está começando."""
+        padrao = _PADROES_BIPE.get(tipo)
+        if self._bipes and padrao:
+            threading.Thread(target=_tocar_bipe, args=(padrao,), daemon=True).start()
 
     def parar(self) -> None:
         """Corta qualquer fala em andamento (usado ao sair do programa)."""

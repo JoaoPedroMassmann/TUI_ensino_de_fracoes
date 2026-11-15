@@ -1,20 +1,37 @@
 from fracoes.atividades import FASES
-from fracoes.avaliacao import total_oitavos
+from fracoes.avaliacao import Leitura
 from fracoes.config import TAG_ID_MAP
 from fracoes.estado import Sessao
 
 
 class FaladorFalso:
+    """Só registra o que foi pedido, sem tocar som."""
+
     def __init__(self):
         self.falas = []
+        self.bipes = []
 
     def falar(self, texto):
         self.falas.append(texto)
+
+    def bipe(self, tipo):
+        self.bipes.append(tipo)
 
 
 def _sessao():
     f = FaladorFalso()
     return Sessao(f), f
+
+
+def _ids_corretos(q):
+    if q.ids_obrigatorios:
+        return list(q.ids_obrigatorios)
+    ids, restante = [], q.soma_alvo
+    for tag, val in ((TAG_ID_MAP[4], 4), (TAG_ID_MAP[2], 2), (TAG_ID_MAP[1], 1)):
+        while restante >= val:
+            ids.append(tag)
+            restante -= val
+    return ids
 
 
 def test_inicio_fala_titulo_e_questao():
@@ -23,11 +40,37 @@ def test_inicio_fala_titulo_e_questao():
     assert "Questão 1 de" in f.falas[-1]
 
 
-def test_erro_repete_enunciado():
+def test_resposta_certa_marca_resolvida_e_toca_bipe():
+    s, f = _sessao()
+    s.verificar_ou_avancar(Leitura([TAG_ID_MAP[1]]))
+    assert s.estado.resolvida and f.bipes[-1] == "ok"
+
+
+def test_erro_conta_tentativas_e_repete_enunciado_na_segunda():
+    s, f = _sessao()
+    errada = Leitura([TAG_ID_MAP[4]])  # a questão 1 pede um oitavo
+    s.verificar_ou_avancar(errada)
+    assert s.estado.tentativas == 1 and "Repetindo o enunciado" not in f.falas[-1]
+    s.verificar_ou_avancar(errada)
+    assert s.estado.tentativas == 2 and "Repetindo o enunciado" in f.falas[-1]
+    assert f.bipes[-2:] == ["erro", "erro"]
+    assert not s.estado.resolvida
+
+
+def test_aviso_sem_pecas_nao_conta_tentativa():
+    s, f = _sessao()
+    s.verificar_ou_avancar(Leitura([]))
+    assert s.estado.tentativas == 0 and f.bipes[-1] == "aviso"
+
+
+def test_tentativas_zeram_ao_avancar_reiniciar_e_trocar_fase():
     s, _ = _sessao()
-    s.verificar_ou_avancar([TAG_ID_MAP[1]], 1)
-    s.verificar_ou_avancar([], 0)
-    assert s.estado.resolvida is False
+    s.verificar_ou_avancar(Leitura([TAG_ID_MAP[4]]))
+    s.reiniciar_questao()
+    assert s.estado.tentativas == 0
+    s.verificar_ou_avancar(Leitura([TAG_ID_MAP[4]]))
+    s.trocar_fase(2)
+    assert s.estado.tentativas == 0
 
 
 def test_percorre_todas_as_fases():
@@ -35,16 +78,10 @@ def test_percorre_todas_as_fases():
     for fase in sorted(FASES):
         s.trocar_fase(fase)
         for q in FASES[fase].questoes:
-            ids = list(q.ids_obrigatorios) if q.ids_obrigatorios else None
-            if ids is None:
-                ids, restante = [], q.soma_alvo
-                for tag, val in ((TAG_ID_MAP[4], 4), (TAG_ID_MAP[2], 2), (TAG_ID_MAP[1], 1)):
-                    while restante >= val:
-                        ids.append(tag)
-                        restante -= val
-            s.verificar_ou_avancar(ids, total_oitavos(ids))
+            leitura = Leitura(_ids_corretos(q))
+            s.verificar_ou_avancar(leitura)
             assert s.estado.resolvida
-            s.verificar_ou_avancar(ids, total_oitavos(ids))  # avança
+            s.verificar_ou_avancar(leitura)  # avança
     assert s.estado.rotulo == "FASE CONCLUÍDA"
 
 
