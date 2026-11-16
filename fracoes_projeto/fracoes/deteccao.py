@@ -12,7 +12,6 @@ from . import config
 def criar_detector() -> cv2.aruco.ArucoDetector:
     aruco_dict = cv2.aruco.getPredefinedDictionary(config.ARUCO_DICT_TYPE)
     parametros = cv2.aruco.DetectorParameters()
-    parametros.cornerRefinementMethod = cv2.aruco.CORNER_REFINE_SUBPIX
     parametros.minMarkerPerimeterRate = config.MIN_MARKER_PERIMETER_RATE
     parametros.adaptiveThreshWinSizeMin = config.ADAPTIVE_THRESH_WIN_MIN
     parametros.adaptiveThreshWinSizeMax = config.ADAPTIVE_THRESH_WIN_MAX
