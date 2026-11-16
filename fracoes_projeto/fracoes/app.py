@@ -7,6 +7,7 @@ import logging
 import cv2
 
 from . import config
+from .atividades import FASES
 from .avaliacao import Leitura
 from .deteccao import Estabilizador, criar_detector
 from .estado import Sessao
@@ -15,7 +16,11 @@ from .interface import desenhar_interface
 
 logger = logging.getLogger(__name__)
 
-TECLAS_AJUDA = "Teclas: [1-4] fases | [ESPAÇO] verificar/avançar | [R] refazer | [P] repetir pergunta | [Q] sair"
+FASE_MIN = min(FASES)
+FASE_MAX = max(FASES)
+TECLAS_FASE = {str(k): k for k in FASES}
+
+TECLAS_AJUDA = f"Teclas: [{FASE_MIN}-{FASE_MAX}] fases | [ESPAÇO] verificar/avançar | [R] refazer | [P] repetir pergunta | [Q] sair"
 
 
 def ler_tecla(codigo: int) -> str:
@@ -33,8 +38,8 @@ def tratar_tecla(tecla: str, sessao: Sessao, leitura: Leitura) -> bool:
     """Executa o comando da tecla. Devolve False quando o usuário pediu para sair."""
     if tecla == "q":
         return False
-    if tecla in ("1", "2", "3", "4"):
-        sessao.trocar_fase(int(tecla))
+    if tecla in TECLAS_FASE:
+        sessao.trocar_fase(TECLAS_FASE[tecla])
     elif tecla == "r":
         sessao.reiniciar_questao()
     elif tecla == "p":

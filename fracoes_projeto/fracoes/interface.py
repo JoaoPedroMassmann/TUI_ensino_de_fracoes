@@ -8,6 +8,8 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
+from .atividades import FASES
+
 from . import config
 from .avaliacao import texto_leitura
 from .estado import EstadoSistema
@@ -90,14 +92,17 @@ def desenhar_interface(
     largura = w - 2 * margem
 
     fase = estado.fase_atual
+    etapa_texto = f" (etapa {estado.etapa_atual}/2)" if estado.questao.duas_etapas else ""
+    if estado.troca:
+        etapa_texto = " (troca de base)"
     blocos = [
         (fase.titulo, fontes["titulo"], config.AMARELO),
         (
-            f"Questão {estado.questao_atual + 1} de {len(fase.questoes)}",
+            f"Questão {estado.questao_atual + 1} de {len(fase.questoes)}{etapa_texto}",
             fontes["pequeno"],
             config.CINZA,
         ),
-        (estado.questao.enunciado, fontes["enunciado"], config.BRANCO),
+        (estado.enunciado_atual, fontes["enunciado"], config.BRANCO),
     ]
     _, y = desenhar_painel(draw, margem, margem, largura, blocos, escala=escala)
 
@@ -115,8 +120,9 @@ def desenhar_interface(
         escala=escala,
     )
 
-    acao = "Próxima questão" if estado.resolvida else "Verificar"
-    atalhos = f"[ESPAÇO] {acao}    [R] Refazer    [P] Repetir pergunta    [1-4] Fases    [Q] Sair"
+    fase_min, fase_max = min(FASES), max(FASES)
+    acao = "Próxima questão" if estado.resolvida else "Continuar" if estado.troca else "Verificar"
+    atalhos = f"[ESPAÇO] {acao}    [R] Refazer    [P] Repetir pergunta    [{fase_min}-{fase_max}] Fases    [Q] Sair"
     topo, _ = desenhar_painel(
         draw,
         margem,

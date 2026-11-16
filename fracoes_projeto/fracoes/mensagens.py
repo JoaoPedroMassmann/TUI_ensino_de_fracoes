@@ -25,6 +25,10 @@ PEDE_PECAS = "A questão pede peças específicas que somam {esperado}."
 
 LEMBRAR_ENUNCIADO = "Aperte P para ouvir a pergunta de novo."
 
+RETIRAR_PECA_BASE = "Agora, com a ajuda do instrutor, retire a peça base atual da área da câmera e aperte espaço para continuar."
+RETIRAR_BASE_ERRO = "Ainda há peças na visão da câmera. Retire todas as peças e aperte espaço de novo."
+POSICIONAR_PECA_BASE = "Agora, com a ajuda do instrutor, posicione a outra peça base pedida na área da câmera e aperte espaço para continuar."
+
 # números e peças por extenso
 _NUMEROS = [
     "zero",

@@ -43,7 +43,7 @@ class Diagnostico:
     diferenca: int  # esperado - total (positivo: falta; negativo: passou)
     faltam: tuple[int, ...]  # IDs das peças a acrescentar
     sobram: tuple[int, ...]  # IDs das peças a retirar
-    por_pecas: bool  # a questão pede peças específicas (e não só um valor)
+    por_pecas: bool  # a questão pede peças específicas
 
 
 def total_oitavos(ids: list[int]) -> int:
@@ -95,11 +95,17 @@ def sugerir_ajuste(ids: list[int], diferenca: int) -> tuple[tuple[int, ...], tup
     )
 
 
-def diagnosticar(questao: Questao, ids: list[int]) -> Diagnostico:
+def diagnosticar(questao: Questao, ids: list[int], etapa_atual: int = 1) -> Diagnostico:
     total = total_oitavos(ids)
-    if questao.ids_obrigatorios is not None:
-        esperado = total_oitavos(list(questao.ids_obrigatorios))
-        na_mesa, pedidas = Counter(ids), Counter(questao.ids_obrigatorios)
+    ids_obrigatorios = (
+        questao.ids_obrigatorios_etapa_dois
+        if etapa_atual == 2 and questao.ids_obrigatorios_etapa_dois is not None
+        else questao.ids_obrigatorios
+    )
+
+    if ids_obrigatorios is not None:
+        esperado = total_oitavos(list(ids_obrigatorios))
+        na_mesa, pedidas = Counter(ids), Counter(ids_obrigatorios)
         faltam = tuple(sorted((pedidas - na_mesa).elements()))
         sobram = tuple(sorted((na_mesa - pedidas).elements()))
         if not faltam and not sobram:
@@ -178,21 +184,20 @@ def _com_nota(texto: str, leitura: Leitura) -> str:
     return f"{texto} {msg.NOTA_OSCILANDO}" if leitura.oscilando else texto
 
 
-def avaliar(questao: Questao, leitura: Leitura, tentativa: int = 1) -> Resultado:
+def avaliar(questao: Questao, leitura: Leitura, tentativa: int = 1, etapa_atual: int = 1) -> Resultado:
     """Avalia a montagem atual. `tentativa` é o número desta tentativa (1, 2, 3...)."""
     if not leitura.ids:
         return Resultado("aviso", _com_nota(msg.SEM_PECAS, leitura), True)
 
-    diag = diagnosticar(questao, leitura.ids)
+    diag = diagnosticar(questao, leitura.ids, etapa_atual=etapa_atual)
     total = msg.oitavos(diag.total)
     if diag.situacao == "ok":
         modelo = msg.OK_PECAS if diag.por_pecas else msg.OK_SOMA
         return Resultado("ok", modelo.format(total=total), False)
 
     texto = _texto_erro(diag, leitura.ids, tentativa)
-    # a pergunta é repetida na segunda tentativa errada; depois disso o aluno usa a tecla P
+    # O enunciado é repetido na segunda tentativa errada; depois disso o aluno usa a tecla P
     return Resultado("erro", _com_nota(texto, leitura), tentativa == 2)
-
 
 def texto_leitura(ids_validos: list[int], total: int) -> str:
     """Texto que descreve, na tela, as peças que a câmera está vendo."""

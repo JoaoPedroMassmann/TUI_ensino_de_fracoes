@@ -15,17 +15,28 @@ MEIO = TAG_ID_MAP[4]  # 1/2 equivale a (4/8)
 class Questao:
     """Uma questão. Use exatamente um dos dois critérios de resposta:
 
-    ids_obrigatorios: peças exatas que devem estar na mesa (IDs das tags);
-    soma_alvo: total em oitavos, com quaisquer peças.
+    ids_obrigatorios: peças exatas que devem estar posicionadas na peça base (IDs das tags);
+    soma_alvo: total em oitavos, com quaisquer peças;
+    duas_etapas: se True, o usuário deve construir duas frações equivalentes em duas peças bases diferentes;
+    segundo_enunciado: enunciado da segunda etapa, se houver;
+    ids_obrigatorios_etapa_dois: peças exatas que devem estar posicionadas na peça base na segunda etapa (IDs das tags).
+
     """
     enunciado: str
     ids_obrigatorios: tuple[int, ...] | None = None
     soma_alvo: int | None = None
+    duas_etapas: bool = False
+    segundo_enunciado: str | None = None
+    ids_obrigatorios_etapa_dois: tuple[int, ...] | None = None
 
     def __post_init__(self) -> None:
         if (self.ids_obrigatorios is None) == (self.soma_alvo is None):
             raise ValueError("Informe ids_obrigatorios OU soma_alvo (apenas um).")
-
+        if self.duas_etapas:
+            if self.ids_obrigatorios is None or self.ids_obrigatorios_etapa_dois is None:
+                raise ValueError("Questões com duas_etapas exigem ids_obrigatorios e ids_obrigatorios_etapa_dois.")
+        elif self.ids_obrigatorios_etapa_dois is not None:
+            raise ValueError("ids_obrigatorios_etapa_dois só deve ser usado com duas_etapas=True.")
 
 @dataclass(frozen=True)
 class Fase:
@@ -38,25 +49,38 @@ FASES: dict[int, Fase] = {
         "Fase 1: Frações Unitárias Usuais",
         (
             Questao(
-                "Monte a fração unitária 1 oitavo", 
+                "Encaixe a peça de 1 oitavo na peça base, para assim formar a fração de 1 oitavo.", 
                 ids_obrigatorios=(OITAVO,),
             ),
             Questao(
-                "Uma pizza foi dividida em 8 partes. Monte a fração que corresponde a um pedaço dessa pizza",
-                ids_obrigatorios=(OITAVO,),
-            ),
-            Questao(
-                "Posicione a peça unitária 1 quarto", 
+                "Encaixe a peça de 1 quarto na peça base, para assim formar a fração de 1 quarto.", 
                 ids_obrigatorios=(QUARTO,),
             ),
             Questao(
-                "Posicione a peça unitária 1 meio", 
+                "Encaixe a peça de 1 meio na peça base, para assim formar a fração de 1 meio.", 
                 ids_obrigatorios=(MEIO,),
             ),
         ),
     ),
     2: Fase(
-        "Fase 2: Representação de Números como Frações",
+            "Fase 2: Representação de Números como Frações",
+            (
+                Questao(
+                    "Encaixe peças de 1 oitavo na base até formar a fração de 1 inteiro.", 
+                    ids_obrigatorios=(OITAVO,) * 8,
+                ),
+                Questao(
+                    "Encaixe peças de 1 quarto na base até formar a fração de 1 inteiro.", 
+                    ids_obrigatorios=(QUARTO,) * 4,
+                ),
+                Questao(
+                    "Encaixe peças de 1 meio na base até formar a fração de 1 inteiro.", 
+                    ids_obrigatorios=(MEIO,) * 2,
+                ),
+            ),
+        ),
+    3: Fase(
+        "Fase 3: Representação de Números como Frações",
         (
             Questao(
                 "Monte 4 oitavos, que representa metade de um inteiro", 
@@ -72,8 +96,8 @@ FASES: dict[int, Fase] = {
             ),
         ),
     ),
-    3: Fase(
-        "Fase 3: Frações Equivalentes",
+    4: Fase(
+        "Fase 4: Frações Equivalentes",
         (
             Questao(
                 "Monte uma fração equivalente a 1 quarto usando oitavos",
@@ -89,8 +113,8 @@ FASES: dict[int, Fase] = {
             ),
         ),
     ),
-    4: Fase(
-        "Fase 4: Relação Parte / Todo",
+    5: Fase(
+        "Fase 5: Relação Parte / Todo",
         (
             Questao(
                 "Monte 3 oitavos, 3 partes de um total de 8",
@@ -107,6 +131,32 @@ FASES: dict[int, Fase] = {
             Questao(
                 "De uma barra de cereal com 8 quadradinhos, você comeu 2. Monte a fração que sobrou",
                 soma_alvo=6,
+            ),
+        ),
+    ),
+    6: Fase(
+        "Fase 6: Atividades com duas fases",
+        (
+            Questao(
+                "Monte uma fração de 4 oitavos utilizando peças de um oitavo",
+                ids_obrigatorios=(OITAVO,) * 4,
+                duas_etapas=True,
+                segundo_enunciado="Agora, monte uma com a mesma quantidade de oitavos utilizando peças de 1 quarto",
+                ids_obrigatorios_etapa_dois=(QUARTO,) * 2,
+            ),
+            Questao(
+                "Monte uma fração de 8 oitavos utilizando peças de 1 quarto",
+                ids_obrigatorios=(QUARTO,) * 4,
+                duas_etapas=True,
+                segundo_enunciado="Agora, monte uma com a mesma quantidade de oitavos utilizando peças de 1 um meio",
+                ids_obrigatorios_etapa_dois=(MEIO,) * 2,
+            ),
+            Questao(
+                "Monte uma fração de 4 oitavos utilizando peças de 1 um meio",
+                ids_obrigatorios=(MEIO,),
+                duas_etapas=True,
+                segundo_enunciado="Agora, monte uma com a mesma quantidade de oitavos utilizando peças de 1 quarto",
+                ids_obrigatorios_etapa_dois=(QUARTO,) * 2,
             ),
         ),
     ),
