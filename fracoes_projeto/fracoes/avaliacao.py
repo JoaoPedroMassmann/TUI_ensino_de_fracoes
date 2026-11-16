@@ -199,6 +199,28 @@ def avaliar(questao: Questao, leitura: Leitura, tentativa: int = 1, etapa_atual:
     # O enunciado é repetido na segunda tentativa errada; depois disso o aluno usa a tecla P
     return Resultado("erro", _com_nota(texto, leitura), tentativa == 2)
 
+
+def descrever_leitura(leitura: Leitura) -> str:
+    """Texto falado do modo exploração."""
+    if not leitura.ids:
+        return _com_nota(msg.EXPLORACAO_VAZIA, leitura)
+    total = leitura.total
+    pecas = msg.listar_pecas(leitura.ids)
+    if len(leitura.ids) == 1:
+        modelo = msg.EXPLORACAO_UMA_PECA if total == 1 else msg.EXPLORACAO_UMA_PECA_VALE
+        return _com_nota(modelo.format(pecas=pecas, total=msg.oitavos(total)), leitura)
+    partes = [msg.LEITURA.format(pecas=pecas, total=msg.oitavos(total))]
+    if total == TOTAL_OITAVOS:
+        partes.append(msg.EXPLORACAO_INTEIRO)
+    elif total > TOTAL_OITAVOS:
+        partes.append(msg.EXPLORACAO_MAIS_QUE_INTEIRO)
+    else:
+        n, d = simplificar_fracao(total)
+        if d != TOTAL_OITAVOS:
+            partes.append(msg.EXPLORACAO_IGUAL.format(fracao=msg.fracao_falada(n, d)))
+    return _com_nota(" ".join(partes), leitura)
+
+
 def texto_leitura(ids_validos: list[int], total: int) -> str:
     """Texto que descreve, na tela, as peças que a câmera está vendo."""
     if not ids_validos:

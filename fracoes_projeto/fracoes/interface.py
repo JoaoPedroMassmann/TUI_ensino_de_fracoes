@@ -104,6 +104,15 @@ def desenhar_interface(
         ),
         (estado.enunciado_atual, fontes["enunciado"], config.BRANCO),
     ]
+    if estado.exploracao:
+        blocos = [
+            ("Modo exploração", fontes["titulo"], config.AMARELO),
+            (
+                "Coloque peças diante da câmera e aperte espaço para ouvir o que ela vê.",
+                fontes["enunciado"],
+                config.BRANCO,
+            ),
+        ]
     _, y = desenhar_painel(draw, margem, margem, largura, blocos, escala=escala)
 
     blocos = []
@@ -122,7 +131,15 @@ def desenhar_interface(
 
     fase_min, fase_max = min(FASES), max(FASES)
     acao = "Próxima questão" if estado.resolvida else "Continuar" if estado.troca else "Verificar"
-    atalhos = f"[ESPAÇO] {acao}    [R] Refazer    [P] Repetir pergunta    [{fase_min}-{fase_max}] Fases    [Q] Sair"
+    atalhos = (
+        f"[ESPAÇO] {acao}    [R] Refazer    [P] Repetir pergunta    [E] Explorar    "
+        f"[{fase_min}-{fase_max}] Fases    [Q] Sair"
+    )
+    if estado.exploracao:
+        atalhos = (
+            f"[ESPAÇO] Ler peças    [P] Repetir leitura    [E] Sair do modo explorar    "
+            f"[{fase_min}-{fase_max}] Fases    [Q] Sair"
+        )
     topo, _ = desenhar_painel(
         draw,
         margem,

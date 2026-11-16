@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from . import config
 from . import mensagens as msg
 from .atividades import FASES, Fase, Questao
-from .avaliacao import Leitura, avaliar
+from .avaliacao import Leitura, avaliar, descrever_leitura
 
 INSTRUCAO = "Posicione as peças diante da câmera e aperte a tecla espaço para verificar."
 
@@ -19,6 +19,7 @@ TIPOS_FEEDBACK = {
     "aviso": ("ATENÇÃO", config.AMARELO, "Atenção."),
     "parabens": ("FASE CONCLUÍDA", config.VERDE, None),
     "info": (None, config.BRANCO, None),
+    "leitura": ("LEITURA", config.BRANCO, None),
 }
 
 TROCA_NENHUMA = 0
@@ -40,6 +41,7 @@ class EstadoSistema:
     questao_atual: int = 0
     etapa_atual: int = 1
     troca: int = TROCA_NENHUMA
+    exploracao: bool = False
     resolvida: bool = False
     tentativas: int = 0
     rotulo: str | None = None
@@ -99,6 +101,7 @@ class Sessao:
 
     def trocar_fase(self, fase: int, abertura_extra: str = "") -> None:
         self.estado.fase = fase
+        self.estado.exploracao = False
         self.estado.questao_atual = 0
         self._zerar_questao()
         abertura = f"{abertura_extra} {titulo_falado(self.estado.fase_atual)}".strip()
@@ -111,18 +114,44 @@ class Sessao:
         self.estado.tentativas = 0
 
     def reiniciar_questao(self) -> None:
+        if self.estado.exploracao:
+            return
         self._zerar_questao()
         self.definir_feedback("info", "Questão reiniciada. " + INSTRUCAO)
 
-    def repetir_pergunta(self) -> None:
-        instrucoes_troca = {
+    def _instrucao_troca(self) -> str | None:
+        """Instrução da troca de base em andamento, ou None se não há troca."""
+        instrucoes = {
             TROCA_RETIRAR: msg.RETIRAR_PECA_BASE,
             TROCA_POSICIONAR: msg.POSICIONAR_PECA_BASE,
         }
-        self.falador.falar(instrucoes_troca.get(self.estado.troca) or self.fala_questao())
+        return instrucoes.get(self.estado.troca)
+
+    def repetir_pergunta(self) -> None:
+        if self.estado.exploracao:
+            self.falador.falar(msg.EXPLORACAO_INICIO)
+            return
+        self.falador.falar(self._instrucao_troca() or self.fala_questao())
+
+    def alternar_exploracao(self) -> None:
+        """Liga ou desliga o modo exploração, que só lê o que a câmera vê."""
+        estado = self.estado
+        if estado.exploracao:
+            estado.exploracao = False
+            estado.rotulo, estado.cor = None, config.BRANCO
+            estado.mensagem = self._instrucao_troca() or INSTRUCAO
+            retomada = self._instrucao_troca() or self.fala_questao()
+            self.falador.falar(f"{msg.EXPLORACAO_SAIDA} {retomada}")
+        else:
+            estado.exploracao = True
+            self.definir_feedback("info", msg.EXPLORACAO_INICIO)
+
 
     def verificar_ou_avancar(self, leitura: Leitura) -> None:
         estado = self.estado
+        if estado.exploracao:
+            self.definir_feedback("leitura", descrever_leitura(leitura))
+            return
         if estado.troca != TROCA_NENHUMA:
             self._tratar_troca(leitura)
             return

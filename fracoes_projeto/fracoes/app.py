@@ -20,7 +20,7 @@ FASE_MIN = min(FASES)
 FASE_MAX = max(FASES)
 TECLAS_FASE = {str(k): k for k in FASES}
 
-TECLAS_AJUDA = f"Teclas: [{FASE_MIN}-{FASE_MAX}] fases | [ESPAÇO] verificar/avançar | [R] refazer | [P] repetir pergunta | [Q] sair"
+TECLAS_AJUDA = f"Teclas: [{FASE_MIN}-{FASE_MAX}] fases | [ESPAÇO] verificar/avançar | [R] refazer | [P] repetir pergunta | [E] alternar exploração | [Q] sair"
 
 
 def ler_tecla(codigo: int) -> str:
@@ -40,6 +40,8 @@ def tratar_tecla(tecla: str, sessao: Sessao, leitura: Leitura) -> bool:
         return False
     if tecla in TECLAS_FASE:
         sessao.trocar_fase(TECLAS_FASE[tecla])
+    elif tecla == "e":
+        sessao.alternar_exploracao()
     elif tecla == "r":
         sessao.reiniciar_questao()
     elif tecla == "p":
