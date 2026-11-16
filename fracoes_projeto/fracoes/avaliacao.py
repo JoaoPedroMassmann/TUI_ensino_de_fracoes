@@ -35,7 +35,7 @@ class Resultado(NamedTuple):
 
 @dataclass(frozen=True)
 class Diagnostico:
-    """Resumo objetivo da diferença entre a mesa e a questão."""
+    """Resumo objetivo da diferença entre a mesa e a atividade."""
 
     situacao: str  # "ok" | "valor_certo_pecas_erradas" | "valor_errado"
     total: int
@@ -43,7 +43,9 @@ class Diagnostico:
     diferenca: int  # esperado - total (positivo: falta; negativo: passou)
     faltam: tuple[int, ...]  # IDs das peças a acrescentar
     sobram: tuple[int, ...]  # IDs das peças a retirar
-    por_pecas: bool  # a questão pede peças específicas
+    por_pecas: bool  # a atividade pede peças específicas
+    pedidas: tuple[int, ...] = ()  # IDs exatos pedidos quando por_pecas=True
+    unidade_enunciado: str | None = None  # termo utilizado pelo enunciado (ex.: "metade de um inteiro")
 
 
 def total_oitavos(ids: list[int]) -> int:
@@ -56,6 +58,14 @@ def simplificar_fracao(numerador: int, denominador: int = TOTAL_OITAVOS) -> tupl
         return 0, 1
     divisor = math.gcd(numerador, denominador)
     return numerador // divisor, denominador // divisor
+
+
+def formatar_valor_contextual(oitavos_val: int, unidade_enunciado: str | None = None) -> str:
+    """Descreve o valor na linguagem da atividade primeiro e em oitavos em seguida."""
+    em_oitavos = msg.oitavos(oitavos_val)
+    if unidade_enunciado and unidade_enunciado.lower() != em_oitavos.lower():
+        return f"{unidade_enunciado} (que equivale a {em_oitavos})"
+    return em_oitavos
 
 
 def ids_para_valor(valor: int) -> tuple[int, ...]:
@@ -114,14 +124,42 @@ def diagnosticar(questao: Questao, ids: list[int], etapa_atual: int = 1) -> Diag
             situacao = "valor_certo_pecas_erradas"
         else:
             situacao = "valor_errado"
-        return Diagnostico(situacao, total, esperado, esperado - total, faltam, sobram, True)
+        return Diagnostico(
+            situacao=situacao,
+            total=total,
+            esperado=esperado,
+            diferenca=esperado - total,
+            faltam=faltam,
+            sobram=sobram,
+            por_pecas=True,
+            pedidas=ids_obrigatorios,
+            unidade_enunciado=questao.unidade_enunciado,
+        )
 
     esperado = questao.soma_alvo
     diferenca = esperado - total
     if diferenca == 0:
-        return Diagnostico("ok", total, esperado, 0, (), (), False)
+        return Diagnostico(
+            situacao="ok",
+            total=total,
+            esperado=esperado,
+            diferenca=0,
+            faltam=(),
+            sobram=(),
+            por_pecas=False,
+            unidade_enunciado=questao.unidade_enunciado,
+        )
     faltam, sobram = sugerir_ajuste(ids, diferenca)
-    return Diagnostico("valor_errado", total, esperado, diferenca, faltam, sobram, False)
+    return Diagnostico(
+        situacao="valor_errado",
+        total=total,
+        esperado=esperado,
+        diferenca=diferenca,
+        faltam=faltam,
+        sobram=sobram,
+        por_pecas=False,
+        unidade_enunciado=questao.unidade_enunciado,
+    )
 
 
 def _direcao(diferenca: int) -> str:
@@ -146,12 +184,19 @@ def _acao(diag: Diagnostico) -> str:
 
 
 def _texto_erro(diag: Diagnostico, ids: list[int], tentativa: int) -> str:
-    """Mensagem de erro que fica mais detalhada a cada tentativa (1 = só o resultado)."""
+    """Mensagem de erro que fica mais detalhada a cada tentativa."""
     pecas, total = msg.listar_pecas(ids), msg.oitavos(diag.total)
     partes: list[str] = []
 
     if diag.situacao == "valor_certo_pecas_erradas":
-        partes.append(msg.LEITURA_VALOR_CERTO.format(pecas=pecas, total=total))
+        pedidas_txt = msg.listar_pecas(diag.pedidas)
+        partes.append(
+            msg.LEITURA_EQUIVALENTE.format(
+                pecas_cap=msg.maiuscula(pecas),
+                valem=msg.concordar(ids, "vale", "valem"),
+                pedidas=pedidas_txt,
+            )
+        )
         if tentativa >= 2:
             sobra = msg.concordar(diag.sobram, "Sobra", "Sobram")
             falta = msg.concordar(diag.faltam, "Falta", "Faltam")
@@ -159,17 +204,13 @@ def _texto_erro(diag: Diagnostico, ids: list[int], tentativa: int) -> str:
             partes.append(f"{falta} {msg.listar_pecas(diag.faltam)}.")
         if tentativa >= 3:
             partes.append(_acao(diag))
-            vale = msg.concordar(diag.sobram, "vale", "valem")
-            partes.append(
-                f"{msg.maiuscula(msg.listar_pecas(diag.sobram))} {vale} o mesmo que "
-                f"{msg.listar_pecas(diag.faltam)}."
-            )
     else:
         if abs(diag.diferenca) == 1:
             partes.append("Quase!")
         partes.append(msg.LEITURA.format(pecas=pecas, total=total))
+        alvo_txt = formatar_valor_contextual(diag.esperado, diag.unidade_enunciado)
         pedido = msg.PEDE_PECAS if diag.por_pecas else msg.PEDE_SOMA
-        partes.append(pedido.format(esperado=msg.oitavos(diag.esperado)))
+        partes.append(pedido.format(esperado=alvo_txt))
         if tentativa >= 2:
             partes.append(_direcao(diag.diferenca))
         if tentativa >= 3:
@@ -184,16 +225,18 @@ def _com_nota(texto: str, leitura: Leitura) -> str:
     return f"{texto} {msg.NOTA_OSCILANDO}" if leitura.oscilando else texto
 
 
-def avaliar(questao: Questao, leitura: Leitura, tentativa: int = 1, etapa_atual: int = 1) -> Resultado:
+def avaliar(
+    questao: Questao, leitura: Leitura, tentativa: int = 1, etapa_atual: int = 1
+) -> Resultado:
     """Avalia a montagem atual. `tentativa` é o número desta tentativa (1, 2, 3...)."""
     if not leitura.ids:
         return Resultado("aviso", _com_nota(msg.SEM_PECAS, leitura), True)
 
     diag = diagnosticar(questao, leitura.ids, etapa_atual=etapa_atual)
-    total = msg.oitavos(diag.total)
+    alvo_txt = formatar_valor_contextual(diag.esperado, diag.unidade_enunciado)
     if diag.situacao == "ok":
         modelo = msg.OK_PECAS if diag.por_pecas else msg.OK_SOMA
-        return Resultado("ok", modelo.format(total=total), False)
+        return Resultado("ok", modelo.format(total=alvo_txt), False)
 
     texto = _texto_erro(diag, leitura.ids, tentativa)
     # O enunciado é repetido na segunda tentativa errada; depois disso o aluno usa a tecla P

@@ -1,4 +1,4 @@
-"""Estado da atividade e transições entre questões e fases."""
+"""Estado da atividade e transições entre atividades e fases."""
 
 from __future__ import annotations
 
@@ -10,21 +10,25 @@ from . import mensagens as msg
 from .atividades import FASES, Fase, Questao
 from .avaliacao import Leitura, avaliar, descrever_leitura
 
-INSTRUCAO = "Posicione as peças diante da câmera e aperte a tecla espaço para verificar."
+INSTRUCAO = (
+    "Posicione as peças numéricas sobre a peça base, na frente da câmera, e aperte espaço para verificar."
+)
 
 # tipo -> rótulo na tela, cor da mensagem, frase falada antes da mensagem
 TIPOS_FEEDBACK = {
-    "ok": ("CORRETO", config.VERDE, "Correto!"),
+    "ok": ("CORRETO", config.VERDE, None),
     "erro": ("TENTE DE NOVO", config.VERMELHO, "Tente de novo."),
     "aviso": ("ATENÇÃO", config.AMARELO, "Atenção."),
     "parabens": ("FASE CONCLUÍDA", config.VERDE, None),
     "info": (None, config.BRANCO, None),
     "leitura": ("LEITURA", config.BRANCO, None),
+    "instrutor": ("INSTRUTOR", config.AMARELO, None),
 }
 
 TROCA_NENHUMA = 0
 TROCA_RETIRAR = 1
 TROCA_POSICIONAR = 2
+
 
 def com_ponto(texto: str) -> str:
     return texto if texto.endswith((".", "!", "?")) else texto + "."
@@ -39,14 +43,16 @@ def titulo_falado(fase: Fase) -> str:
 class EstadoSistema:
     fase: int = 1
     questao_atual: int = 0
-    etapa_atual: int = 1
+    etapa_atual: int = 1  # 1 = utilizando a primeira base, 2 = utilizando a segunda base
     troca: int = TROCA_NENHUMA
     exploracao: bool = False
     resolvida: bool = False
     tentativas: int = 0
+    confirmando_saida: bool = False
     rotulo: str | None = None
     cor: tuple[int, int, int] = config.BRANCO
     mensagem: str = INSTRUCAO
+    ids_ultima_avaliacao: tuple[int, ...] | None = None
 
     @property
     def fase_atual(self) -> Fase:
@@ -62,37 +68,50 @@ class EstadoSistema:
             return self.questao.segundo_enunciado
         return self.questao.enunciado
 
+
 class Sessao:
     """Regras da atividade."""
+
     def __init__(self, falador, estado: EstadoSistema | None = None) -> None:
         self.falador = falador
         self.estado = estado or EstadoSistema()
 
-    # Falas e feedback
     def fala_questao(self, abertura: str = "") -> str:
         estado = self.estado
+        prefixo_etapa = f"Etapa {estado.etapa_atual} de 2." if estado.questao.duas_etapas else ""
         partes = [
             abertura,
-            f"Questão {estado.questao_atual + 1} de {len(estado.fase_atual.questoes)}.",
+            f"Atividade {estado.questao_atual + 1} de {len(estado.fase_atual.questoes)}.",
+            prefixo_etapa,
             com_ponto(estado.enunciado_atual),
         ]
         return " ".join(p for p in partes if p)
 
-    def definir_feedback(self, tipo: str, texto: str, repetir_enunciado: bool = False) -> None:
-        """Atualiza a tela e fornece o feedback. Se for erro, também repete o enunciado."""
+    def definir_feedback(
+        self,
+        tipo: str,
+        texto: str,
+        repetir_enunciado: bool = False,
+        bipe_tipo: str | None = None,
+    ) -> None:
+        """Atualiza a tela e fornece o feedback."""
         estado = self.estado
         rotulo, cor, falado = TIPOS_FEEDBACK[tipo]
         estado.rotulo, estado.cor, estado.mensagem = rotulo, cor, texto
 
         mensagem_falada = texto
         if repetir_enunciado:
-            mensagem_falada = f"{texto} Repetindo o enunciado: {com_ponto(estado.enunciado_atual)}"
-        self.falador.bipe(tipo)
+            mensagem_falada = f"{texto} Repetindo a atividade: {com_ponto(estado.enunciado_atual)}"
+        self.falador.bipe(bipe_tipo or tipo)
         self.falador.falar(" ".join(p for p in (falado, mensagem_falada) if p))
 
-    def anunciar_questao(self, abertura: str = "") -> None:
+    def anunciar_questao(self, abertura: str = "", bipe_tipo: str | None = None) -> None:
+        self.falador.bipe("tecla")
         estado = self.estado
         estado.rotulo, estado.cor, estado.mensagem = None, config.BRANCO, INSTRUCAO
+        estado.ids_ultima_avaliacao = None
+        if bipe_tipo:
+            self.falador.bipe(bipe_tipo)
         self.falador.falar(f"{self.fala_questao(abertura)} {INSTRUCAO}")
 
     # Comandos do usuário 
@@ -100,6 +119,8 @@ class Sessao:
         self.anunciar_questao(abertura=titulo_falado(self.estado.fase_atual))
 
     def trocar_fase(self, fase: int, abertura_extra: str = "") -> None:
+        if fase not in FASES:
+            return
         self.estado.fase = fase
         self.estado.exploracao = False
         self.estado.questao_atual = 0
@@ -112,12 +133,14 @@ class Sessao:
         self.estado.resolvida = False
         self.estado.troca = TROCA_NENHUMA
         self.estado.tentativas = 0
+        self.estado.confirmando_saida = False
+        self.estado.ids_ultima_avaliacao = None
 
     def reiniciar_questao(self) -> None:
         if self.estado.exploracao:
             return
         self._zerar_questao()
-        self.definir_feedback("info", "Questão reiniciada. " + INSTRUCAO)
+        self.definir_feedback("info", "Atividade reiniciada. " + INSTRUCAO)
 
     def _instrucao_troca(self) -> str | None:
         """Instrução da troca de base em andamento, ou None se não há troca."""
@@ -128,6 +151,7 @@ class Sessao:
         return instrucoes.get(self.estado.troca)
 
     def repetir_pergunta(self) -> None:
+        self.falador.bipe("tecla")
         if self.estado.exploracao:
             self.falador.falar(msg.EXPLORACAO_INICIO)
             return
@@ -136,16 +160,41 @@ class Sessao:
     def alternar_exploracao(self) -> None:
         """Liga ou desliga o modo exploração, que só lê o que a câmera vê."""
         estado = self.estado
+        estado.ids_ultima_avaliacao = None
         if estado.exploracao:
             estado.exploracao = False
             estado.rotulo, estado.cor = None, config.BRANCO
             estado.mensagem = self._instrucao_troca() or INSTRUCAO
             retomada = self._instrucao_troca() or self.fala_questao()
+            self.falador.bipe("info")
             self.falador.falar(f"{msg.EXPLORACAO_SAIDA} {retomada}")
         else:
             estado.exploracao = True
             self.definir_feedback("info", msg.EXPLORACAO_INICIO)
 
+    def pedir_confirmacao_saida(self) -> None:
+        self.estado.confirmando_saida = True
+        self.definir_feedback("aviso", msg.CONFIRMAR_SAIDA)
+
+    def cancelar_confirmacao_saida(self) -> None:
+        self.estado.confirmando_saida = False
+        self.definir_feedback("info", "Saída cancelada. " + (self._instrucao_troca() or INSTRUCAO))
+
+    def notificar_mudanca_mesa(self, ids_atuais: tuple[int, ...]) -> None:
+        """Limpa feedback desatualizado na tela quando o aluno altera as peças após verificar."""
+        estado = self.estado
+        if (
+            estado.ids_ultima_avaliacao is None
+            or estado.exploracao
+            or estado.troca != TROCA_NENHUMA
+            or estado.rotulo == "FASE CONCLUÍDA"
+        ):
+            return
+        if ids_atuais != estado.ids_ultima_avaliacao:
+            estado.ids_ultima_avaliacao = None
+            estado.rotulo = None
+            estado.cor = config.BRANCO
+            estado.mensagem = msg.LEITURA_MUDOU
 
     def verificar_ou_avancar(self, leitura: Leitura) -> None:
         estado = self.estado
@@ -158,7 +207,15 @@ class Sessao:
         if estado.resolvida:
             self._avancar()
             return
-        resultado = avaliar(estado.questao, leitura, tentativa=estado.tentativas + 1, etapa_atual=estado.etapa_atual)
+
+        resultado = avaliar(
+            estado.questao,
+            leitura,
+            tentativa=estado.tentativas + 1,
+            etapa_atual=estado.etapa_atual,
+        )
+        estado.ids_ultima_avaliacao = tuple(sorted(leitura.ids))
+
         if resultado.tipo == "erro":  # "nenhuma peça" (aviso) não conta como tentativa
             estado.tentativas += 1
 
@@ -172,26 +229,29 @@ class Sessao:
         )
 
     def _iniciar_troca(self) -> None:
-        """Primeira etapa certa: pede a retirada da base."""
+        """Primeira base certa: pede a retirada da peça base ao instrutor."""
         estado = self.estado
         estado.troca = TROCA_RETIRAR
         estado.tentativas = 0
         estado.resolvida = False
-        self.definir_feedback("ok", msg.RETIRAR_PECA_BASE)
+        estado.ids_ultima_avaliacao = None
+        self.definir_feedback("instrutor", msg.RETIRAR_PECA_BASE)
 
     def _tratar_troca(self, leitura: Leitura) -> None:
-        """Comportamento quando o usuário está trocando a peça base (duas etapas)."""
+        """Comportamento quando o instrutor está trocando a peça base."""
         estado = self.estado
         if estado.troca == TROCA_RETIRAR:
             if leitura.ids:
-                self.definir_feedback("aviso", msg.RETIRAR_BASE_ERRO)
+                self.definir_feedback(
+                    "aviso", msg.RETIRAR_BASE_ERRO, bipe_tipo="instrutor"
+                )
                 return
             estado.troca = TROCA_POSICIONAR
-            self.definir_feedback("info", msg.POSICIONAR_PECA_BASE)
+            self.definir_feedback("instrutor", msg.POSICIONAR_PECA_BASE)
             return
         estado.troca = TROCA_NENHUMA
         estado.etapa_atual = 2
-        self.anunciar_questao(abertura="Segunda etapa.")
+        self.anunciar_questao(abertura="Etapa 2 de 2.")
 
     def _avancar(self) -> None:
         estado = self.estado
@@ -205,5 +265,5 @@ class Sessao:
             self.definir_feedback(
                 "parabens",
                 "Parabéns! Você concluiu todas as fases do sistema! "
-                "Aperte 1 para recomeçar ou q para sair.",
+                "Aperte 1 para recomeçar ou Q para sair.",
             )

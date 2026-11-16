@@ -1,4 +1,4 @@
-"""Fala assíncrona (text-to-speech) com pyttsx3."""
+"""Fala assíncrona (text-to-speech) com pyttsx3 e sinais sonoros imediatos."""
 
 from __future__ import annotations
 
@@ -28,13 +28,17 @@ _SCRIPT_TTS = (
     "e.runAndWait()\n"
 )
 
-
 # tipo de feedback -> sequência de (frequência em Hz, duração em ms)
+# Frequências >= 330 Hz para boa audibilidade em alto-falantes de notebook.
 _PADROES_BIPE = {
+    "tecla": ((580, 35),),
     "ok": ((660, 120), (880, 160)),
     "parabens": ((660, 120), (880, 120), (1100, 240)),
-    "erro": ((220, 350),),
-    "aviso": ((440, 120), (440, 120)),
+    "erro": ((330, 320),),
+    "aviso": ((480, 110), (480, 110)),
+    "info": ((540, 90),),
+    "leitura": ((620, 70), (740, 70)),
+    "instrutor": ((880, 90), (660, 90), (880, 120)),
 }
 
 
@@ -57,7 +61,8 @@ def tts_disponivel() -> bool:
 
 
 class Falador:
-    """Fila de falas."""
+    """Fila de falas e sinais sonoros."""
+
     def __init__(
         self,
         habilitado: bool = True,
@@ -66,6 +71,7 @@ class Falador:
         bipes: bool = True,
     ) -> None:
         self._habilitado = habilitado
+        self._erro_audio = False
         self._bipes = bipes
         self._taxa = taxa
         self._dicas_voz = tuple(dicas_voz)
@@ -74,6 +80,12 @@ class Falador:
         self._processo: subprocess.Popen | None = None
         self._geracao = 0
         self._thread: threading.Thread | None = None
+        self.tocou_bipe = False
+
+    @property
+    def saude_ok(self) -> bool:
+        """True se o TTS está instalado e funcionando sem erros."""
+        return self._habilitado and not self._erro_audio
 
     def iniciar(self) -> None:
         if self._habilitado and self._thread is None:
@@ -91,9 +103,10 @@ class Falador:
         self._fila.put((geracao, texto))
 
     def bipe(self, tipo: str) -> None:
-        """Toca um sinal curto, que responde na hora enquanto a voz ainda está começando."""
+        """Toca um sinal curto imediato."""
         padrao = _PADROES_BIPE.get(tipo)
         if self._bipes and padrao:
+            self.tocou_bipe = True
             threading.Thread(target=_tocar_bipe, args=(padrao,), daemon=True).start()
 
     def parar(self) -> None:
@@ -124,8 +137,11 @@ class Falador:
                         ]
                     )
                     self._processo = processo
-                processo.wait()
+                codigo = processo.wait()
+                if codigo not in (0, None, -15, 1):
+                    self._erro_audio = True
             except Exception:
+                self._erro_audio = True
                 logger.exception("Erro no sistema de áudio")
             finally:
                 with self._lock:

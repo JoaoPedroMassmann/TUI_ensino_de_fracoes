@@ -8,9 +8,8 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
-from .atividades import FASES
-
 from . import config
+from .atividades import FASES
 from .avaliacao import texto_leitura
 from .estado import EstadoSistema
 
@@ -77,7 +76,15 @@ def desenhar_painel(
 
 
 def desenhar_interface(
-    frame: np.ndarray, estado: EstadoSistema, ids_validos: list[int], total: int
+    frame: np.ndarray,
+    estado: EstadoSistema,
+    ids_validos: list[int],
+    total: int,
+    *,
+    oscilando: bool = False,
+    camera_ok: bool = True,
+    audio_ok: bool = True,
+    erro_fatal: str | None = None,
 ) -> np.ndarray:
     h, w = frame.shape[:2]
     escala = max(0.6, w / 1280)
@@ -91,24 +98,44 @@ def desenhar_interface(
     gap = int(10 * escala)
     largura = w - 2 * margem
 
+    if erro_fatal:
+        desenhar_painel(
+            draw,
+            margem,
+            h // 3,
+            largura,
+            [
+                ("ERRO DE HARDWARE", fontes["tag"], config.VERMELHO),
+                (erro_fatal, fontes["enunciado"], config.BRANCO),
+            ],
+            borda=config.VERMELHO,
+            escala=escala,
+        )
+        saida = Image.alpha_composite(base, camada).convert("RGB")
+        return cv2.cvtColor(np.array(saida), cv2.COLOR_RGB2BGR)
+
     fase = estado.fase_atual
-    etapa_texto = f" (etapa {estado.etapa_atual}/2)" if estado.questao.duas_etapas else ""
+    etapa_texto = f" (Etapa {estado.etapa_atual}/2)" if estado.questao.duas_etapas else ""
     if estado.troca:
-        etapa_texto = " (troca de base)"
+        etapa_texto = " (troca de peça base)"
+    tentativa_texto = f"  |  Tentativa {estado.tentativas}" if estado.tentativas > 0 else ""
+    status_cam = "Câmera: OK" if camera_ok else "Câmera: ERRO"
+    status_som = "Áudio: OK" if audio_ok else "Sem áudio"
+    cabecalho = (
+        f"Atividade {estado.questao_atual + 1} de {len(fase.questoes)}"
+        f"{etapa_texto}{tentativa_texto}  |  {status_cam}  |  {status_som}"
+    )
+
     blocos = [
         (fase.titulo, fontes["titulo"], config.AMARELO),
-        (
-            f"Questão {estado.questao_atual + 1} de {len(fase.questoes)}{etapa_texto}",
-            fontes["pequeno"],
-            config.CINZA,
-        ),
+        (cabecalho, fontes["pequeno"], config.CINZA if audio_ok else config.AMARELO),
         (estado.enunciado_atual, fontes["enunciado"], config.BRANCO),
     ]
     if estado.exploracao:
         blocos = [
-            ("Modo exploração", fontes["titulo"], config.AMARELO),
+            (f"Modo exploração  |  {status_cam}  |  {status_som}", fontes["titulo"], config.AMARELO),
             (
-                "Coloque peças diante da câmera e aperte espaço para ouvir o que ela vê.",
+                "Encaixe peças numéricas na peça base e aperte espaço para ouvir o que foi identificado.",
                 fontes["enunciado"],
                 config.BRANCO,
             ),
@@ -130,14 +157,14 @@ def desenhar_interface(
     )
 
     fase_min, fase_max = min(FASES), max(FASES)
-    acao = "Próxima questão" if estado.resolvida else "Continuar" if estado.troca else "Verificar"
+    acao = "Próxima atividade" if estado.resolvida else "Continuar" if estado.troca else "Verificar"
     atalhos = (
         f"[ESPAÇO] {acao}    [R] Refazer    [P] Repetir pergunta    [E] Explorar    "
         f"[{fase_min}-{fase_max}] Fases    [Q] Sair"
     )
     if estado.exploracao:
         atalhos = (
-            f"[ESPAÇO] Ler peças    [P] Repetir leitura    [E] Sair do modo explorar    "
+            f"[ESPAÇO] Ler peças    [P] Repetir instrução    [E] Sair do modo explorar    "
             f"[{fase_min}-{fase_max}] Fases    [Q] Sair"
         )
     topo, _ = desenhar_painel(
@@ -149,12 +176,18 @@ def desenhar_interface(
         base=h - margem,
         escala=escala,
     )
+
+    blocos_leitura = [(texto_leitura(ids_validos, total), fontes["leitura"], config.BRANCO)]
+    if oscilando:
+        blocos_leitura.append(
+            ("Leitura oscilando — mantenha as peças paradas.", fontes["pequeno"], config.AMARELO)
+        )
     desenhar_painel(
         draw,
         margem,
         0,
         largura,
-        [(texto_leitura(ids_validos, total), fontes["leitura"], config.BRANCO)],
+        blocos_leitura,
         base=topo - gap,
         escala=escala,
     )
