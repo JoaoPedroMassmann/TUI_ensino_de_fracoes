@@ -3,7 +3,6 @@ from fracoes.avaliacao import Leitura
 from fracoes.config import TAG_ID_MAP
 from fracoes.estado import Sessao
 
-
 class FaladorFalso:
     """Só registra o que foi pedido, sem tocar som."""
 
@@ -16,6 +15,37 @@ class FaladorFalso:
 
     def bipe(self, tipo):
         self.bipes.append(tipo)
+
+def test_inicio_fala_boas_vindas_e_opcoes():
+    s, f = _sessao()
+    s.iniciar()
+    assert s.estado.menu
+    assert "Bem-vindo" in f.falas[-1] and "aperte espaço" in f.falas[-1].lower()
+
+
+def test_espaco_no_menu_comeca_na_fase_1():
+    s, f = _sessao()
+    s.iniciar()
+    s.verificar_ou_avancar(Leitura([]))
+    assert not s.estado.menu and s.estado.fase == 1
+    assert "Atividade 1 de" in f.falas[-1]
+
+
+def test_numero_no_menu_escolhe_a_fase():
+    s, _ = _sessao()
+    s.iniciar()
+    s.trocar_fase(3)
+    assert not s.estado.menu and s.estado.fase == 3
+
+
+def test_p_no_menu_repete_as_instrucoes_e_r_nao_faz_nada():
+    s, f = _sessao()
+    s.iniciar()
+    s.repetir_pergunta()
+    assert "Bem-vindo" in f.falas[-1]
+    antes = len(f.falas)
+    s.reiniciar_questao()
+    assert len(f.falas) == antes and s.estado.menu
 
 
 def _sessao():
@@ -32,13 +62,6 @@ def _ids_corretos(q):
             ids.append(tag)
             restante -= val
     return ids
-
-
-def test_inicio_fala_titulo_e_questao():
-    s, f = _sessao()
-    s.iniciar()
-    assert "Questão 1 de" in f.falas[-1]
-
 
 def test_resposta_certa_marca_resolvida_e_toca_bipe():
     s, f = _sessao()

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .config import TAG_ID_MAP
+from .config import ID_VALUES_MAP, TAG_ID_MAP
 
 OITAVO = TAG_ID_MAP[1]  # 1/8
 QUARTO = TAG_ID_MAP[2]  # 1/4 equivale a (2/8)
@@ -39,6 +39,12 @@ class Questao:
                 raise ValueError(
                     "Atividades com duas_etapas exigem ids_obrigatorios e ids_obrigatorios_etapa_dois."
                 )
+            if not self.segundo_enunciado:
+                raise ValueError("Atividades com duas_etapas exigem segundo_enunciado.")
+            total1 = sum(ID_VALUES_MAP[i] for i in self.ids_obrigatorios)
+            total2 = sum(ID_VALUES_MAP[i] for i in self.ids_obrigatorios_etapa_dois)
+            if total1 != total2:
+                raise ValueError("As duas etapas devem somar o mesmo valor.")
         elif self.ids_obrigatorios_etapa_dois is not None:
             raise ValueError("ids_obrigatorios_etapa_dois só deve ser usado com duas_etapas=True.")
 

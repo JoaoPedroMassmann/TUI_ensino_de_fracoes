@@ -7,6 +7,34 @@ from collections import Counter
 from .config import ID_VALUES_MAP
 
 # frases fixas
+BOAS_VINDAS = (
+    "Bem-vindo ao sistema de frações. "
+    "Instrutor: posicione a peça base no centro da área da câmera e entregue as peças à criança. "
+    "Aluno: encaixe as peças numéricas na peça base, mantenha as mãos longe das marcas e "
+    "aperte espaço para verificar. "
+    "Aperte H a qualquer momento para ouvir todos os comandos."
+)
+
+MENU_OPCOES = (
+    "Aperte espaço para começar pela fase 1, ou aperte um número de {minimo} a {maximo} "
+    "para escolher a fase."
+)
+
+AJUDA_TECLAS = (
+    "Comandos: espaço verifica a montagem ou avança. P repete a pergunta. R refaz a atividade. "
+    "E liga ou desliga o modo Exploração. "
+    "Números de {minimo} a {maximo} escolhem a fase. Q sai. H repete estes comandos."
+)
+
+CAMERA_DESCONECTADA = (
+    "Aviso ao instrutor: a câmera foi desconectada. Verifique o cabo. "
+    "O sistema tenta reconectar sozinho."
+)
+CAMERA_RECONECTADA = "Câmera reconectada. Pode continuar."
+CAMERA_AVISO_TELA = (
+    "A câmera foi desconectada. Verifique o cabo enquanto o programa tenta reconectar sozinho."
+)
+
 SEM_PECAS = (
     "A câmera não identificou nenhuma peça numérica na peça base. "
     "Coloque as peças na frente da câmera e aperte espaço de novo."
@@ -30,12 +58,12 @@ CONFIRMAR_SAIDA = (
     "Quer mesmo sair do programa? Aperte Q de novo para sair, ou qualquer outra tecla para continuar."
 )
 
-# modo exploração
+# modo Exploração
 EXPLORACAO_INICIO = (
-    "Modo exploração ativado. Coloque peças numéricas sobre a mesa, na frente da câmera, "
+    "Modo Exploração ativado. Encaixe peças na base, na frente da câmera, "
     "e aperte espaço para ouvir o que foi identificado, ou E para voltar à atividade."
 )
-EXPLORACAO_SAIDA = "Saindo do modo exploração."
+EXPLORACAO_SAIDA = "Saindo do modo Exploração."
 EXPLORACAO_VAZIA = "A câmera não identificou nenhuma peça numérica na peça base."
 EXPLORACAO_UMA_PECA = "A câmera identificou {pecas}."
 EXPLORACAO_UMA_PECA_VALE = "A câmera identificou {pecas}, que equivale a {total}."
@@ -81,7 +109,12 @@ _NUMEROS = [
 _NOMES_PECAS = {1: ("oitavo", "oitavos"), 2: ("quarto", "quartos"), 4: ("meio", "meios")}
 
 # denominador -> (singular, plural), para frações simplificadas como 1/2 e 3/4
-_DENOMINADORES = {1: ("inteiro", "inteiros"), 2: ("meio", "meios"), 4: ("quarto", "quartos"), 8: ("oitavo", "oitavos")}
+_DENOMINADORES = {
+    1: ("inteiro", "inteiros"),
+    2: ("meio", "meios"),
+    4: ("quarto", "quartos"),
+    8: ("oitavo", "oitavos"),
+}
 
 
 def por_extenso(n: int) -> str:

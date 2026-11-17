@@ -81,6 +81,7 @@ class Falador:
         self._geracao = 0
         self._thread: threading.Thread | None = None
         self.tocou_bipe = False
+        self._cortado = False
 
     @property
     def saude_ok(self) -> bool:
@@ -117,7 +118,21 @@ class Falador:
 
     def _terminar_processo(self) -> None:
         if self._processo is not None and self._processo.poll() is None:
+            self._cortado = True
             self._processo.terminate()
+
+    def _registrar_saida(self, codigo: int | None) -> None:
+        """Só conta como falha do áudio se o processo falhou sem termos cortado a fala."""
+        with self._lock:
+            cortado, self._cortado = self._cortado, False
+        if cortado or codigo is None:
+            return
+        if codigo == 0:
+            self._erro_audio = False
+        else:
+            if not self._erro_audio:
+                self.bipe("erro")
+            self._erro_audio = True
 
     def _trabalhar(self) -> None:
         while True:
@@ -137,9 +152,7 @@ class Falador:
                         ]
                     )
                     self._processo = processo
-                codigo = processo.wait()
-                if codigo not in (0, None, -15, 1):
-                    self._erro_audio = True
+                self._registrar_saida(processo.wait())
             except Exception:
                 self._erro_audio = True
                 logger.exception("Erro no sistema de áudio")

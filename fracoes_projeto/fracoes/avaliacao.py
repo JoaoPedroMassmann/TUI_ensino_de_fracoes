@@ -222,7 +222,7 @@ def _texto_erro(diag: Diagnostico, ids: list[int], tentativa: int) -> str:
 
 
 def _com_nota(texto: str, leitura: Leitura) -> str:
-    return f"{texto} {msg.NOTA_OSCILANDO}" if leitura.oscilando else texto
+    return f"{msg.NOTA_OSCILANDO} {texto}" if leitura.oscilando else texto
 
 
 def avaliar(
@@ -244,7 +244,7 @@ def avaliar(
 
 
 def descrever_leitura(leitura: Leitura) -> str:
-    """Texto falado do modo exploração."""
+    """Texto falado do Modo Exploração."""
     if not leitura.ids:
         return _com_nota(msg.EXPLORACAO_VAZIA, leitura)
     total = leitura.total

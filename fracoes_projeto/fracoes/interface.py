@@ -118,7 +118,9 @@ def desenhar_interface(
     etapa_texto = f" (Etapa {estado.etapa_atual}/2)" if estado.questao.duas_etapas else ""
     if estado.troca:
         etapa_texto = " (troca de peça base)"
-    tentativa_texto = f"  |  Tentativa {estado.tentativas}" if estado.tentativas > 0 else ""
+    tentativa_texto = (
+        f"  |  Tentativas anteriores: {estado.tentativas}" if estado.tentativas > 0 else ""
+    )
     status_cam = "Câmera: OK" if camera_ok else "Câmera: ERRO"
     status_som = "Áudio: OK" if audio_ok else "Sem áudio"
     cabecalho = (
@@ -131,9 +133,24 @@ def desenhar_interface(
         (cabecalho, fontes["pequeno"], config.CINZA if audio_ok else config.AMARELO),
         (estado.enunciado_atual, fontes["enunciado"], config.BRANCO),
     ]
+    if estado.menu:
+        blocos = [
+            ("Sistema Educativo de Frações", fontes["titulo"], config.AMARELO),
+            (
+                f"{status_cam}  |  {status_som}",
+                fontes["pequeno"],
+                config.CINZA if audio_ok else config.AMARELO,
+            ),
+            (
+                "Escolha a fase ou aperte espaço para começar pela fase 1:",
+                fontes["enunciado"],
+                config.BRANCO,
+            ),
+            *[(f.titulo, fontes["pequeno"], config.BRANCO) for f in FASES.values()],
+        ]
     if estado.exploracao:
         blocos = [
-            (f"Modo exploração  |  {status_cam}  |  {status_som}", fontes["titulo"], config.AMARELO),
+            (f"Modo Exploração  |  {status_cam}  |  {status_som}", fontes["titulo"], config.AMARELO),
             (
                 "Encaixe peças numéricas na peça base e aperte espaço para ouvir o que foi identificado.",
                 fontes["enunciado"],
@@ -158,14 +175,20 @@ def desenhar_interface(
 
     fase_min, fase_max = min(FASES), max(FASES)
     acao = "Próxima atividade" if estado.resolvida else "Continuar" if estado.troca else "Verificar"
-    atalhos = (
-        f"[ESPAÇO] {acao}    [R] Refazer    [P] Repetir pergunta    [E] Explorar    "
-        f"[{fase_min}-{fase_max}] Fases    [Q] Sair"
-    )
     if estado.exploracao:
         atalhos = (
             f"[ESPAÇO] Ler peças    [P] Repetir instrução    [E] Sair do modo explorar    "
-            f"[{fase_min}-{fase_max}] Fases    [Q] Sair"
+            f"[{fase_min}-{fase_max}] Fases    [H] Ajuda    [Q] Sair"
+        )
+    elif estado.menu:
+        atalhos = (
+            f"[ESPAÇO] Começar na fase 1    [{fase_min}-{fase_max}] Escolher fase    "
+            "[P] Repetir instruções    [E] Explorar    [H] Ajuda    [Q] Sair"
+        )
+    else:
+        atalhos = (
+            f"[ESPAÇO] {acao}    [R] Refazer    [P] Repetir pergunta    [E] Explorar    "
+            f"[{fase_min}-{fase_max}] Fases    [H] Ajuda    [Q] Sair"
         )
     topo, _ = desenhar_painel(
         draw,
