@@ -6,7 +6,8 @@ from collections import Counter
 
 from .config import ID_VALUES_MAP
 
-# frases fixas
+# Frases fixas
+
 BOAS_VINDAS = (
     "Bem-vindo ao sistema de frações. "
     "Instrutor: posicione a peça base no centro da área da câmera e entregue as peças à criança. "
@@ -26,6 +27,7 @@ AJUDA_TECLAS = (
     "Números de {minimo} a {maximo} escolhem a fase. Q sai. H repete estes comandos."
 )
 
+# Câmera
 CAMERA_DESCONECTADA = (
     "Aviso ao instrutor: a câmera foi desconectada. Verifique o cabo. "
     "O sistema tenta reconectar sozinho."
@@ -35,41 +37,35 @@ CAMERA_AVISO_TELA = (
     "A câmera foi desconectada. Verifique o cabo enquanto o programa tenta reconectar sozinho."
 )
 
-SEM_PECAS = (
-    "A câmera não identificou nenhuma peça numérica na peça base. "
-    "Coloque as peças na frente da câmera e aperte espaço de novo."
+# Peça base
+SEM_BASE = (
+    "A câmera não identificou a peça base. "
+    "Coloque a peça base no centro da área da câmera e aperte espaço de novo."
 )
-NOTA_OSCILANDO = (
-    "A leitura está oscilando. Deixe as peças paradas sobre a mesa, sem cobrir as marcas com a mão."
+RETIRAR_BASE_VISIVEL = (
+    "Aviso ao instrutor: a peça base ainda está na visão da câmera. "
+    "Retire-a e aperte espaço de novo."
 )
-OK_PECAS = "Correto! Você montou {total} com as peças numéricas pedidas. Aperte espaço para continuar."
-OK_SOMA = "Correto! Você montou {total}. Aperte espaço para continuar."
-
-LEITURA = "A câmera identificou {pecas}, que somam {total}."
-LEITURA_EQUIVALENTE = (
-    "{pecas_cap} {valem} o mesmo que {pedidas}, mas esta atividade pede {pedidas}."
-)
-PEDE_SOMA = "A atividade pede {esperado}."
-PEDE_PECAS = "A atividade pede peças numéricas específicas que somam {esperado}."
-
-LEMBRAR_ENUNCIADO = "Aperte P para ouvir a pergunta de novo."
-LEITURA_MUDOU = "A leitura mudou. Aperte espaço para verificar."
-CONFIRMAR_SAIDA = (
-    "Quer mesmo sair do programa? Aperte Q de novo para sair, ou qualquer outra tecla para continuar."
+BASE_NAO_VISTA = (
+    "Aviso ao instrutor: a câmera não identificou a peça base. "
+    "Posicione-a no centro da área da câmera e aperte espaço de novo."
 )
 
-# modo Exploração
-EXPLORACAO_INICIO = (
-    "Modo Exploração ativado. Encaixe peças na base, na frente da câmera, "
-    "e aperte espaço para ouvir o que foi identificado, ou E para voltar à atividade."
+# Calibração
+CALIBRACAO_INICIO = (
+    "Calibração da peça base. Instrutor: coloque a peça base sozinha, sem nenhuma peça numérica, "
+    "no centro da área da câmera, sobre um fundo claro, e aperte espaço. "
+    "Para continuar sem detectar a base, aperte N."
 )
-EXPLORACAO_SAIDA = "Saindo do modo Exploração."
-EXPLORACAO_VAZIA = "A câmera não identificou nenhuma peça numérica na peça base."
-EXPLORACAO_UMA_PECA = "A câmera identificou {pecas}."
-EXPLORACAO_UMA_PECA_VALE = "A câmera identificou {pecas}, que equivale a {total}."
-EXPLORACAO_INTEIRO = "Isso forma um inteiro."
-EXPLORACAO_MAIS_QUE_INTEIRO = "Isso passa de um inteiro."
-EXPLORACAO_IGUAL = "Isso equivale a {fracao}."
+CALIBRACAO_OK = "Calibração concluída."
+CALIBRACAO_PULADA = "Calibração ignorada. A peça base não será detectada nesta sessão."
+CALIBRACAO_FALHAS = {
+    "pecas": "Há peças numéricas na visão da câmera. Retire todas e aperte espaço de novo.",
+    "sem_base": "A câmera não identificou a peça base. Coloque-a no centro, bem iluminada, "
+    "e aperte espaço de novo.",
+    "instavel": "A imagem da peça base está instável. Deixe-a parada e aperte espaço de novo.",
+    "fundo_escuro": "O fundo parece escuro demais. Use uma superfície clara e aperte espaço de novo.",
+}
 
 RETIRAR_PECA_BASE = (
     "Aviso ao instrutor: tire a peça base atual de cima da mesa, "
@@ -84,7 +80,48 @@ POSICIONAR_PECA_BASE = (
     "na frente da câmera, e aperte espaço para continuar."
 )
 
-# números e peças por extenso
+# Peças numéricas
+SEM_PECAS = (
+    "A câmera não identificou nenhuma peça numérica na peça base. "
+    "Coloque as peças na frente da câmera e aperte espaço de novo."
+)
+NOTA_OSCILANDO = (
+    "A leitura está oscilando. Deixe as peças paradas sobre a mesa, sem cobrir as marcas com a mão."
+)
+OK_PECAS = "Correto! Você montou {total} com as peças numéricas pedidas. Aperte espaço para continuar."
+OK_SOMA = "Correto! Você montou {total}. Aperte espaço para continuar."
+
+
+# Resultados de avaliação
+LEITURA = "A câmera identificou {pecas}, que somam {total}."
+LEITURA_EQUIVALENTE = (
+    "{pecas_cap} {valem} o mesmo que {pedidas}, mas esta atividade pede {pedidas}."
+)
+PEDE_SOMA = "A atividade pede {esperado}."
+PEDE_PECAS = "A atividade pede peças numéricas específicas que somam {esperado}."
+
+
+# Mensagens de ajuda e aviso
+LEMBRAR_ENUNCIADO = "Aperte P para ouvir a pergunta de novo."
+LEITURA_MUDOU = "A leitura mudou. Aperte espaço para verificar."
+CONFIRMAR_SAIDA = (
+    "Quer mesmo sair do programa? Aperte Q de novo para sair, ou qualquer outra tecla para continuar."
+)
+
+# Modo Exploração
+EXPLORACAO_INICIO = (
+    "Modo Exploração ativado. Encaixe peças na base, na frente da câmera, "
+    "e aperte espaço para ouvir o que foi identificado, ou E para voltar à atividade."
+)
+EXPLORACAO_SAIDA = "Saindo do modo Exploração."
+EXPLORACAO_VAZIA = "A câmera não identificou nenhuma peça numérica na peça base."
+EXPLORACAO_UMA_PECA = "A câmera identificou {pecas}."
+EXPLORACAO_UMA_PECA_VALE = "A câmera identificou {pecas}, que equivale a {total}."
+EXPLORACAO_INTEIRO = "Isso forma um inteiro."
+EXPLORACAO_MAIS_QUE_INTEIRO = "Isso passa de um inteiro."
+EXPLORACAO_IGUAL = "Isso equivale a {fracao}."
+
+# Números e peças por extenso
 _NUMEROS = [
     "zero",
     "um",
@@ -105,10 +142,10 @@ _NUMEROS = [
     "dezesseis",
 ]
 
-# valor em oitavos -> (singular, plural)
+# Valor em oitavos -> (singular, plural)
 _NOMES_PECAS = {1: ("oitavo", "oitavos"), 2: ("quarto", "quartos"), 4: ("meio", "meios")}
 
-# denominador -> (singular, plural), para frações simplificadas como 1/2 e 3/4
+# Denominador -> (singular, plural), para frações simplificadas como 1/2 e 3/4
 _DENOMINADORES = {
     1: ("inteiro", "inteiros"),
     2: ("meio", "meios"),

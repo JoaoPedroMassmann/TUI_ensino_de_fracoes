@@ -18,9 +18,9 @@ _LIMITE_BUSCA_AJUSTE = 12  # com mais peças que isso, não procuramos a sugest�
 
 class Leitura(NamedTuple):
     """O que a câmera vê no momento de verificar."""
-
     ids: list[int]  # tags conhecidas, já estabilizadas
     oscilando: bool = False  # a leitura vem mudando de quadro para quadro
+    base: bool = True
 
     @property
     def total(self) -> int:
@@ -229,6 +229,8 @@ def avaliar(
     questao: Questao, leitura: Leitura, tentativa: int = 1, etapa_atual: int = 1
 ) -> Resultado:
     """Avalia a montagem atual. `tentativa` é o número desta tentativa (1, 2, 3...)."""
+    if not leitura.base:
+        return Resultado("aviso", _com_nota(msg.SEM_BASE, leitura), True)
     if not leitura.ids:
         return Resultado("aviso", _com_nota(msg.SEM_PECAS, leitura), True)
 

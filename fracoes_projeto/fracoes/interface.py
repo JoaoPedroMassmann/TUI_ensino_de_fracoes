@@ -85,6 +85,7 @@ def desenhar_interface(
     camera_ok: bool = True,
     audio_ok: bool = True,
     erro_fatal: str | None = None,
+    base_ok: bool = True,
 ) -> np.ndarray:
     h, w = frame.shape[:2]
     escala = max(0.6, w / 1280)
@@ -133,6 +134,14 @@ def desenhar_interface(
         (cabecalho, fontes["pequeno"], config.CINZA if audio_ok else config.AMARELO),
         (estado.enunciado_atual, fontes["enunciado"], config.BRANCO),
     ]
+    if estado.calibrando:
+        blocos = [
+            ("Calibração da peça base", fontes["titulo"], config.AMARELO),
+            (f"{status_cam}  |  {status_som}", fontes["pequeno"],
+             config.CINZA if audio_ok else config.AMARELO),
+            ("Peça base sozinha, sem peças numéricas, sobre fundo claro. "
+             "Aperte espaço para calibrar.", fontes["enunciado"], config.BRANCO),
+        ]
     if estado.menu:
         blocos = [
             ("Sistema Educativo de Frações", fontes["titulo"], config.AMARELO),
@@ -180,6 +189,11 @@ def desenhar_interface(
             f"[ESPAÇO] Ler peças    [P] Repetir instrução    [E] Sair do modo explorar    "
             f"[{fase_min}-{fase_max}] Fases    [H] Ajuda    [Q] Sair"
         )
+    elif estado.calibrando:
+        atalhos = (
+            "[ESPAÇO] Calibrar    [N] Continuar sem detectar a base    "
+            "[P] Repetir instruções    [H] Ajuda    [Q] Sair"
+        )
     elif estado.menu:
         atalhos = (
             f"[ESPAÇO] Começar na fase 1    [{fase_min}-{fase_max}] Escolher fase    "
@@ -204,6 +218,11 @@ def desenhar_interface(
     if oscilando:
         blocos_leitura.append(
             ("Leitura oscilando — mantenha as peças paradas.", fontes["pequeno"], config.AMARELO)
+        )
+    if base_ok is not None:
+        blocos_leitura.append(
+            (f"Peça base: {'vista' if base_ok else 'não vista'}", fontes["pequeno"],
+             config.CINZA if base_ok else config.AMARELO)
         )
     desenhar_painel(
         draw,

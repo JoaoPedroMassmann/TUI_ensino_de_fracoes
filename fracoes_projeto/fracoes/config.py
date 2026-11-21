@@ -40,8 +40,18 @@ AMARELO = (255, 220, 70)
 BRANCO = (255, 255, 255)
 CINZA = (190, 190, 190)
 
-# Tamanho monitor (para dimensionar a interface)
-AJUSTAR_TELA = True
+# Detecção da peça base
+DETECTAR_BASE = True
+
+# Limites pré-calibração peça base
+BASE_RAIO_MIN = 0.20  # raio mínimo, como fração do menor lado do quadro
+BASE_RAIO_MAX = 0.30
+BASE_CIRCULARIDADE_MIN = 0.50  # área do contorno / área do círculo mínimo que o envolve
+
+BASE_TOLERANCIA_RAIO = 0.20  # após calibrar: aceita raio medido ±20%
+CALIBRACAO_QUADROS = 10
+CALIBRACAO_DISPERSAO_MAX = 0.10
+
 
 # Fontes da interface
 FONT_CANDIDATES = [

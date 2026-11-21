@@ -47,6 +47,7 @@ class EstadoSistema:
     troca: int = TROCA_NENHUMA
     exploracao: bool = False
     menu: bool = False
+    calibrando: bool = False
     resolvida: bool = False
     tentativas: int = 0
     confirmando_saida: bool = False
@@ -109,14 +110,14 @@ class Sessao:
     def _texto_menu(self) -> str:
         return msg.MENU_OPCOES.format(minimo=min(FASES), maximo=max(FASES))
 
-    def _anunciar_menu(self) -> None:
-        """Tela inicial: fala as instruções e as opções, sem iniciar nenhuma atividade."""
+
+    def _anunciar_menu(self, prefixo: str = "") -> None:
         estado = self.estado
         estado.menu = True
         estado.rotulo, estado.cor = None, config.BRANCO
         estado.mensagem = msg.BOAS_VINDAS
         estado.ids_ultima_avaliacao = None
-        self.falador.falar(f"{msg.BOAS_VINDAS} {self._texto_menu()}")
+        self.falador.falar(f"{prefixo} {msg.BOAS_VINDAS} {self._texto_menu()}".strip())
 
     def falar_ajuda(self) -> None:
         self.falador.falar(msg.AJUDA_TECLAS.format(minimo=min(FASES), maximo=max(FASES)))
@@ -130,9 +131,32 @@ class Sessao:
             self.falador.bipe(bipe_tipo)
         self.falador.falar(f"{self.fala_questao(abertura)} {INSTRUCAO}")
 
-    def iniciar(self) -> None:
+    def iniciar_calibracao(self) -> None:
+        estado = self.estado
+        estado.calibrando, estado.menu = True, False
+        estado.rotulo, estado.cor = None, config.BRANCO
+        estado.mensagem = msg.CALIBRACAO_INICIO
+        self.falador.falar(msg.CALIBRACAO_INICIO)
+
+    def resultado_calibracao(self, codigo: str) -> None:
+        if codigo == "ok":
+            self.estado.calibrando = False
+            self.falador.bipe("ok")
+            self._anunciar_menu(msg.CALIBRACAO_OK)
+        else:
+            self.definir_feedback("aviso", msg.CALIBRACAO_FALHAS[codigo])
+
+    def pular_calibracao(self) -> None:
+        self.estado.calibrando = False
         self.falador.bipe("info")
-        self._anunciar_menu()
+        self._anunciar_menu(msg.CALIBRACAO_PULADA)
+
+    def iniciar(self, calibrar: bool = False) -> None:
+        self.falador.bipe("info")
+        if calibrar:
+            self.iniciar_calibracao()
+        else:
+            self._anunciar_menu()
 
     # Comandos do usuário
 
@@ -173,6 +197,9 @@ class Sessao:
         self.falador.bipe("tecla")
         if self.estado.exploracao:
             self.falador.falar(msg.EXPLORACAO_INICIO)
+            return
+        if self.estado.calibrando:
+            self.falador.falar(msg.CALIBRACAO_INICIO)
             return
         if self.estado.menu:
             self._anunciar_menu()
@@ -278,12 +305,16 @@ class Sessao:
         estado = self.estado
         if estado.troca == TROCA_RETIRAR:
             if leitura.ids:
-                self.definir_feedback(
-                    "aviso", msg.RETIRAR_BASE_ERRO, bipe_tipo="instrutor"
-                )
+                self.definir_feedback("aviso", msg.RETIRAR_BASE_ERRO, bipe_tipo="instrutor")
+                return
+            if leitura.base:
+                self.definir_feedback("aviso", msg.RETIRAR_BASE_VISIVEL, bipe_tipo="instrutor")
                 return
             estado.troca = TROCA_POSICIONAR
             self.definir_feedback("instrutor", msg.POSICIONAR_PECA_BASE)
+            return
+        if not leitura.base:  # TROCA_POSICIONAR
+            self.definir_feedback("aviso", msg.BASE_NAO_VISTA, bipe_tipo="instrutor")
             return
         estado.troca = TROCA_NENHUMA
         estado.etapa_atual = 2

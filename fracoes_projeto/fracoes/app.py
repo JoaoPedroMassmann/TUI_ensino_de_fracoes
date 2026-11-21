@@ -13,7 +13,7 @@ from . import config
 from . import mensagens as msg
 from .atividades import FASES
 from .avaliacao import Leitura
-from .deteccao import Estabilizador, criar_detector
+from .deteccao import DetectorBase, Estabilizador, EstabilizadorBase, criar_detector
 from .estado import Sessao
 from .fala import Falador, tts_disponivel
 from .interface import desenhar_interface
@@ -124,6 +124,9 @@ def tratar_tecla(tecla: str, sessao: Sessao, leitura: Leitura) -> bool:
         sessao.cancelar_confirmacao_saida()
         return True
 
+    if sessao.estado.calibrando and tecla not in ("q", "h", "p"):
+        return True
+
     if tecla == "q":
         sessao.pedir_confirmacao_saida()
     elif tecla in TECLAS_FASE:
@@ -173,8 +176,11 @@ def main() -> int:
 
     detector = criar_detector()
     estabilizador = Estabilizador()
+    estabilizador_base = EstabilizadorBase()
     sessao = Sessao(falador)
-    sessao.iniciar()
+    detector_base = DetectorBase()
+    estabilizador_base = EstabilizadorBase()
+    sessao.iniciar(calibrar=detector_base.ativo)
     logger.info(TECLAS_AJUDA)
 
     ids_anteriores: tuple[int, ...] = ()
@@ -221,13 +227,17 @@ def main() -> int:
             ids_detectados = ids.flatten().tolist() if ids is not None else []
             ids_do_quadro = [i for i in ids_detectados if i in config.ID_VALUES_MAP]
             ids_validos = estabilizador.atualizar(ids_do_quadro)
+            base_ok = estabilizador_base.atualizar(
+                detector_base.medir(frame) if detector_base.ativo else True
+            )
+            leitura = Leitura(ids_validos, estabilizador.oscilando, base_ok)
+
             ids_ordenados = tuple(sorted(ids_validos))
 
             if ids_ordenados != ids_anteriores:
                 sessao.notificar_mudanca_mesa(ids_ordenados)
                 ids_anteriores = ids_ordenados
 
-            leitura = Leitura(ids_validos, estabilizador.oscilando)
 
             tecla, ultima_tecla, instante_tecla = filtrar_tecla(
                 ler_tecla(cv2.waitKey(1)),
@@ -235,6 +245,14 @@ def main() -> int:
                 instante_tecla,
                 time.monotonic(),
             )
+            if sessao.estado.calibrando:
+                if tecla == " ":
+                    sessao.resultado_calibracao(detector_base.calibrar(frame, bool(ids_validos)))
+                    tecla = ""
+                elif tecla == "n":
+                    detector_base.ativo = False
+                    sessao.pular_calibracao()
+                    tecla = ""
             if not tratar_tecla(tecla, sessao, leitura):
                 break
 
