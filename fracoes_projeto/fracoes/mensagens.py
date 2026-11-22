@@ -90,7 +90,7 @@ NOTA_OSCILANDO = (
 )
 OK_PECAS = "Correto! Você montou {total} com as peças numéricas pedidas. Aperte espaço para continuar."
 OK_SOMA = "Correto! Você montou {total}. Aperte espaço para continuar."
-
+PECAS_FORA_BASE = "Aviso ao instrutor: existem peças fora da peça base. Remova-as antes de prosseguir."
 
 # Resultados de avaliação
 LEITURA = "A câmera identificou {pecas}, que somam {total}."

@@ -13,7 +13,13 @@ from . import config
 from . import mensagens as msg
 from .atividades import FASES
 from .avaliacao import Leitura
-from .deteccao import DetectorBase, Estabilizador, EstabilizadorBase, criar_detector
+from .deteccao import (
+    DetectorBase,
+    Estabilizador,
+    EstabilizadorBase,
+    candidatos_base,
+    criar_detector,
+)
 from .estado import Sessao
 from .fala import Falador, tts_disponivel
 from .interface import desenhar_interface
@@ -86,14 +92,9 @@ class Camera:
 
 def ler_tecla(codigo: int) -> str:
     """Tratamento de código de tecla para string. Devolve string vazia se não for uma tecla válida."""
-    codigo &= 0xFF
-    if codigo == 255:
+    if not 0 <= codigo < 128:
         return ""
-
-    try:
-        return chr(codigo).lower()
-    except ValueError:
-        return ""
+    return chr(codigo).lower()
 
 
 def filtrar_tecla(
@@ -176,10 +177,10 @@ def main() -> int:
 
     detector = criar_detector()
     estabilizador = Estabilizador()
-    estabilizador_base = EstabilizadorBase()
     sessao = Sessao(falador)
     detector_base = DetectorBase()
     estabilizador_base = EstabilizadorBase()
+    estabilizador_fora = EstabilizadorBase()
     sessao.iniciar(calibrar=detector_base.ativo)
     logger.info(TECLAS_AJUDA)
 
@@ -196,6 +197,8 @@ def main() -> int:
                 falador.falar(msg.CAMERA_DESCONECTADA)
             elif evento == "voltou":
                 estabilizador.limpar()
+                estabilizador_base.limpar()
+                estabilizador_fora.limpar()
                 falador.bipe("ok")
                 falador.falar(msg.CAMERA_RECONECTADA)
 
@@ -209,6 +212,7 @@ def main() -> int:
                         camera_ok=False,
                         audio_ok=falador.saude_ok,
                         erro_fatal=msg.CAMERA_AVISO_TELA,
+                        base_ok=False,
                     )
                     cv2.imshow(config.JANELA_TITULO, tela)
                 tecla, ultima_tecla, instante_tecla = filtrar_tecla(
@@ -217,7 +221,9 @@ def main() -> int:
                     instante_tecla,
                     time.monotonic(),
                 )
-                if not tratar_tecla(tecla, sessao, Leitura([])):
+                if tecla in (" ", "r", "n"):
+                    tecla = ""
+                if not tratar_tecla(tecla, sessao, Leitura([], base=False)):
                     break
                 continue
 
@@ -225,19 +231,67 @@ def main() -> int:
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             corners, ids, _ = detector.detectMarkers(gray)
             ids_detectados = ids.flatten().tolist() if ids is not None else []
-            ids_do_quadro = [i for i in ids_detectados if i in config.ID_VALUES_MAP]
+
+            ids_do_quadro = []
+            tem_pecas_fora_base = False
+
+            display = frame.copy()
+            if ids is not None:
+                cv2.aruco.drawDetectedMarkers(display, corners, ids)
+
+            if detector_base.ativo:
+                candidatos = candidatos_base(frame)
+                minimo, maximo = detector_base._limites()
+                min_lado = min(frame.shape[:2])
+
+                base_centro = None
+                base_raio = None
+                for r, c, centro in candidatos:
+                    if minimo <= r <= maximo and c >= config.BASE_CIRCULARIDADE_MIN:
+                        base_centro = centro
+                        base_raio = int(r * min_lado)
+                        # Destaca visualmente a peça base detectada
+                        cv2.circle(display, centro, base_raio, (0, 255, 0), 2)
+                        cv2.circle(display, centro, 4, (0, 0, 255), -1)
+                        break
+
+                if ids is not None:
+                    for idx, marker_id in enumerate(ids.flatten()):
+                        if marker_id not in config.ID_VALUES_MAP:
+                            continue
+                        if base_centro is not None and base_raio is not None:
+                            pts = corners[idx][0]
+                            mx = np.mean(pts[:, 0])
+                            my = np.mean(pts[:, 1])
+
+                            dist = np.hypot(mx - base_centro[0], my - base_centro[1])
+                            if dist <= base_raio:
+                                ids_do_quadro.append(int(marker_id))
+                            else:
+                                tem_pecas_fora_base = True
+                        else:
+                            tem_pecas_fora_base = True
+            else:
+                ids_do_quadro = [i for i in ids_detectados if i in config.ID_VALUES_MAP]
+
             ids_validos = estabilizador.atualizar(ids_do_quadro)
             base_ok = estabilizador_base.atualizar(
                 detector_base.medir(frame) if detector_base.ativo else True
             )
-            leitura = Leitura(ids_validos, estabilizador.oscilando, base_ok)
+            fora_base_ok = estabilizador_fora.atualizar(tem_pecas_fora_base)
+            leitura = Leitura(
+                ids_validos,
+                estabilizador.oscilando,
+                base_ok,
+                fora_base_ok,
+                detector_base.ativo,
+            )
 
             ids_ordenados = tuple(sorted(ids_validos))
 
             if ids_ordenados != ids_anteriores:
                 sessao.notificar_mudanca_mesa(ids_ordenados)
                 ids_anteriores = ids_ordenados
-
 
             tecla, ultima_tecla, instante_tecla = filtrar_tecla(
                 ler_tecla(cv2.waitKey(1)),
@@ -247,7 +301,8 @@ def main() -> int:
             )
             if sessao.estado.calibrando:
                 if tecla == " ":
-                    sessao.resultado_calibracao(detector_base.calibrar(frame, bool(ids_validos)))
+                    ha_pecas = any(i in config.ID_VALUES_MAP for i in ids_detectados)
+                    sessao.resultado_calibracao(detector_base.calibrar(frame, ha_pecas))
                     tecla = ""
                 elif tecla == "n":
                     detector_base.ativo = False
@@ -256,9 +311,6 @@ def main() -> int:
             if not tratar_tecla(tecla, sessao, leitura):
                 break
 
-            display = frame.copy()
-            if ids is not None:
-                cv2.aruco.drawDetectedMarkers(display, corners, ids)
             display = desenhar_interface(
                 display,
                 sessao.estado,
@@ -267,6 +319,7 @@ def main() -> int:
                 oscilando=leitura.oscilando,
                 camera_ok=True,
                 audio_ok=falador.saude_ok,
+                base_ok=base_ok,
             )
             cv2.imshow(config.JANELA_TITULO, display)
     finally:

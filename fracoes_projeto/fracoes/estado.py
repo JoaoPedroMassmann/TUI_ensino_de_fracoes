@@ -270,6 +270,9 @@ class Sessao:
         if estado.resolvida:
             self._avancar()
             return
+        if leitura.base and leitura.tem_pecas_fora_base:
+            self.definir_feedback("aviso", msg.PECAS_FORA_BASE)
+            return
 
         resultado = avaliar(
             estado.questao,
@@ -304,16 +307,16 @@ class Sessao:
         """Comportamento quando o instrutor está trocando a peça base."""
         estado = self.estado
         if estado.troca == TROCA_RETIRAR:
-            if leitura.ids:
+            if leitura.ids or leitura.tem_pecas_fora_base:
                 self.definir_feedback("aviso", msg.RETIRAR_BASE_ERRO, bipe_tipo="instrutor")
                 return
-            if leitura.base:
+            if leitura.detecta_base and leitura.base:
                 self.definir_feedback("aviso", msg.RETIRAR_BASE_VISIVEL, bipe_tipo="instrutor")
                 return
             estado.troca = TROCA_POSICIONAR
             self.definir_feedback("instrutor", msg.POSICIONAR_PECA_BASE)
             return
-        if not leitura.base:  # TROCA_POSICIONAR
+        if leitura.detecta_base and not leitura.base:  # TROCA_POSICIONAR
             self.definir_feedback("aviso", msg.BASE_NAO_VISTA, bipe_tipo="instrutor")
             return
         estado.troca = TROCA_NENHUMA

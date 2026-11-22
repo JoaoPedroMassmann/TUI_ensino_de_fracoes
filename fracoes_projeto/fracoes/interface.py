@@ -85,7 +85,7 @@ def desenhar_interface(
     camera_ok: bool = True,
     audio_ok: bool = True,
     erro_fatal: str | None = None,
-    base_ok: bool = True,
+    base_ok: bool = False,
 ) -> np.ndarray:
     h, w = frame.shape[:2]
     escala = max(0.6, w / 1280)
