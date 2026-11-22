@@ -40,8 +40,7 @@ AMARELO = (255, 220, 70)
 BRANCO = (255, 255, 255)
 CINZA = (190, 190, 190)
 
-# Detecção da peça base
-DETECTAR_BASE = True
+# A detecção da peça base só liga depois que o instrutor a calibra (tecla C).
 
 # Limites pré-calibração peça base
 BASE_RAIO_MIN = 0.20  # raio mínimo, como fração do menor lado do quadro

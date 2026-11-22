@@ -57,135 +57,130 @@ class Fase:
 
 FASES: dict[int, Fase] = {
     1: Fase(
-        "Fase 1: Frações Unitárias Usuais",
+        "Fase 1: Frações unitárias",
         (
             Questao(
-                "Encaixe a peça numérica de um oitavo na peça base, para formar a fração de um oitavo.",
+                "Encaixe a peça de um oitavo na peça base e forme um oitavo.",
                 ids_obrigatorios=(OITAVO,),
                 unidade_enunciado="um oitavo",
             ),
             Questao(
-                "Encaixe a peça numérica de um quarto na peça base, para formar a fração de um quarto.",
+                "Encaixe a peça de um quarto na peça base e forme um quarto.",
                 ids_obrigatorios=(QUARTO,),
                 unidade_enunciado="um quarto",
             ),
             Questao(
-                "Encaixe a peça numérica de um meio na peça base, para formar a fração de um meio.",
+                "Encaixe a peça de um meio na peça base e forme um meio.",
                 ids_obrigatorios=(MEIO,),
                 unidade_enunciado="um meio",
             ),
         ),
     ),
     2: Fase(
-        "Fase 2: Formação do Inteiro com Peças Iguais",
+        "Fase 2: Formar o inteiro",
         (
             Questao(
-                "Encaixe peças numéricas de um oitavo na peça base até formar um inteiro.",
+                "Encaixe peças de um oitavo na peça base até encher e formar um inteiro.",
                 ids_obrigatorios=(OITAVO,) * 8,
                 unidade_enunciado="um inteiro",
             ),
             Questao(
-                "Encaixe peças numéricas de um quarto na peça base até formar um inteiro.",
+                "Encaixe peças de um quarto na peça base até encher e formar um inteiro.",
                 ids_obrigatorios=(QUARTO,) * 4,
                 unidade_enunciado="um inteiro",
             ),
             Questao(
-                "Encaixe peças numéricas de um meio na peça base até formar um inteiro.",
+                "Encaixe peças de um meio na peça base até encher e formar um inteiro.",
                 ids_obrigatorios=(MEIO,) * 2,
                 unidade_enunciado="um inteiro",
             ),
         ),
     ),
     3: Fase(
-        "Fase 3: Representação de Números como Frações",
+        "Fase 3: Números fracionários",
         (
             Questao(
-                "Monte quatro oitavos, o que representa metade de um inteiro.",
+                "Monte quatro oitavos. Isso é metade de um inteiro.",
                 soma_alvo=4,
                 unidade_enunciado="metade de um inteiro",
             ),
             Questao(
-                "Monte metade de um inteiro com quaisquer peças numéricas.",
+                "Monte metade de um inteiro com quaisquer peças.",
                 soma_alvo=4,
                 unidade_enunciado="metade de um inteiro",
             ),
             Questao(
-                "Você comprou uma pizza inteira dividida em oito partes. Monte o inteiro completo.",
-                soma_alvo=8,
-                unidade_enunciado="um inteiro",
+                "Uma pizza foi dividida em quatro pedaçoes. Monte a fração que equivale a um pedaço dessa pedaço.",
+                soma_alvo=2,
+                unidade_enunciado="um quarto",
             ),
         ),
     ),
     4: Fase(
-        "Fase 4: Frações Equivalentes",
+        "Fase 4: Frações equivalentes",
         (
             Questao(
-                "Monte uma fração equivalente a um quarto usando peças de um oitavo.",
+                "Monte um quarto usando peças de um oitavo.",
                 ids_obrigatorios=(OITAVO, OITAVO),
                 unidade_enunciado="um quarto",
             ),
             Questao(
-                "Dividindo um lanche: dois pedaços de um oitavo equivalem a um quarto. Monte essa fração.",
-                ids_obrigatorios=(OITAVO, OITAVO),
-                unidade_enunciado="um quarto",
+                "Monte um meio usando peças de um quarto.",
+                ids_obrigatorios=(QUARTO, QUARTO),
+                unidade_enunciado="um meio",
             ),
             Questao(
-                "Para repartir igualmente, quatro pedaços de um oitavo formam a metade de uma torta. Monte essa fração.",
+                "Monte metade de um inteiro usando peças de um oitavo.",
                 ids_obrigatorios=(OITAVO,) * 4,
                 unidade_enunciado="metade de um inteiro",
             ),
         ),
     ),
     5: Fase(
-        "Fase 5: Relação Parte e Todo",
+        "Fase 5: Parte e todo",
         (
             Questao(
-                "Três oitavos equivalem a três partes de um total de oito. Monte essa fração utilizando quaisquer peças numéricas.",
+                "De uma caixa com oito ovos, você usou três. Monte a fração dos ovos que foi usada.",
                 soma_alvo=3,
                 unidade_enunciado="três oitavos",
             ),
             Questao(
-                "De uma caixa com oito ovos para um bolo, você usou três. Monte a fração que representa os ovos usados.",
-                soma_alvo=3,
-                unidade_enunciado="três oitavos",
-            ),
-            Questao(
-                "De uma cartela com oito adesivos, você colou cinco. Monte a fração que representa os adesivos colados.",
+                "De uma cartela com oito adesivos, você colou cinco. Monte a fração dos adesivos que foi colada.",
                 soma_alvo=5,
                 unidade_enunciado="cinco oitavos",
             ),
             Questao(
-                "De uma barra de cereal com oito quadrados, você comeu dois. Monte a fração que representa os quadrados que sobraram.",
+                "De uma barra com oito quadrados, você comeu dois. Monte a fração dos quadrados que sobraram.",
                 soma_alvo=6,
                 unidade_enunciado="seis oitavos",
             ),
         ),
     ),
     6: Fase(
-        "Fase 6: Equivalência em Duas Peças Base",
+        "Fase 6: Frações equivalentes com duas peças base",
         (
             Questao(
-                "Na primeira peça base, monte quatro oitavos utilizando peças numéricas de um oitavo.",
+                "Na primeira peça base, monte quatro oitavos com peças de um oitavo.",
                 ids_obrigatorios=(OITAVO,) * 4,
                 unidade_enunciado="quatro oitavos",
                 duas_etapas=True,
-                segundo_enunciado="Agora, na segunda peça base, monte a mesma quantidade utilizando peças numéricas de um quarto.",
+                segundo_enunciado="Na segunda peça base, monte quatro oitavos com peças de um quarto.",
                 ids_obrigatorios_etapa_dois=(QUARTO,) * 2,
             ),
             Questao(
-                "Na primeira peça base, monte um inteiro utilizando peças numéricas de um quarto.",
+                "Na primeira peça base, monte um inteiro com peças de um quarto.",
                 ids_obrigatorios=(QUARTO,) * 4,
                 unidade_enunciado="um inteiro",
                 duas_etapas=True,
-                segundo_enunciado="Agora, na segunda peça base, monte a mesma quantidade utilizando peças numéricas de um meio.",
+                segundo_enunciado="Na segunda peça base, monte um inteiro com peças de um meio.",
                 ids_obrigatorios_etapa_dois=(MEIO,) * 2,
             ),
             Questao(
-                "Na primeira peça base, monte metade de um inteiro utilizando uma peça numérica de um meio.",
+                "Na primeira peça base, monte metade de um inteiro com uma peça de um meio.",
                 ids_obrigatorios=(MEIO,),
                 unidade_enunciado="metade de um inteiro",
                 duas_etapas=True,
-                segundo_enunciado="Agora, na segunda peça base, monte a mesma quantidade utilizando peças numéricas de um quarto.",
+                segundo_enunciado="Na segunda peça base, monte metade de um inteiro com peças de um quarto.",
                 ids_obrigatorios_etapa_dois=(QUARTO,) * 2,
             ),
         ),

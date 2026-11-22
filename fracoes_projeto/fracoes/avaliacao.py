@@ -66,7 +66,7 @@ def formatar_valor_contextual(oitavos_val: int, unidade_enunciado: str | None = 
     """Descreve o valor na linguagem da atividade primeiro e em oitavos em seguida."""
     em_oitavos = msg.oitavos(oitavos_val)
     if unidade_enunciado and unidade_enunciado.lower() != em_oitavos.lower():
-        return f"{unidade_enunciado} (que equivale a {em_oitavos})"
+        return f"{unidade_enunciado}, ou {em_oitavos}"
     return em_oitavos
 
 
@@ -186,17 +186,23 @@ def _acao(diag: Diagnostico) -> str:
 
 
 def _texto_erro(diag: Diagnostico, ids: list[int], tentativa: int) -> str:
-    """Mensagem de erro que fica mais detalhada a cada tentativa."""
+    """Mensagem de erro que muda a cada tentativa, sem acumular texto.
+
+    1ª: o que a câmera viu e o que a atividade pede. 2ª: o que viu e quanto falta ou passou
+    (a atividade é repetida em seguida). 3ª em diante: só a ação a fazer.
+    """
+    if tentativa >= 3:
+        acao = _acao(diag) or _direcao(diag.diferenca)
+        return f"{acao} {msg.LEMBRAR_ENUNCIADO}".strip()
+
     pecas, total = msg.listar_pecas(ids), msg.oitavos(diag.total)
     partes: list[str] = []
-
     if diag.situacao == "valor_certo_pecas_erradas":
-        pedidas_txt = msg.listar_pecas(diag.pedidas)
         partes.append(
             msg.LEITURA_EQUIVALENTE.format(
                 pecas_cap=msg.maiuscula(pecas),
                 valem=msg.concordar(ids, "vale", "valem"),
-                pedidas=pedidas_txt,
+                pedidas=msg.listar_pecas(diag.pedidas),
             )
         )
         if tentativa >= 2:
@@ -204,22 +210,19 @@ def _texto_erro(diag: Diagnostico, ids: list[int], tentativa: int) -> str:
             falta = msg.concordar(diag.faltam, "Falta", "Faltam")
             partes.append(f"{sobra} {msg.listar_pecas(diag.sobram)}.")
             partes.append(f"{falta} {msg.listar_pecas(diag.faltam)}.")
-        if tentativa >= 3:
-            partes.append(_acao(diag))
     else:
         if abs(diag.diferenca) == 1:
             partes.append("Quase!")
-        partes.append(msg.LEITURA.format(pecas=pecas, total=total))
-        alvo_txt = formatar_valor_contextual(diag.esperado, diag.unidade_enunciado)
-        pedido = msg.PEDE_PECAS if diag.por_pecas else msg.PEDE_SOMA
-        partes.append(pedido.format(esperado=alvo_txt))
+        if pecas == total:  # uma peça de oitavo: não repetir "um oitavo: um oitavo"
+            partes.append(msg.EXPLORACAO_UMA_PECA.format(pecas=pecas))
+        else:
+            partes.append(msg.LEITURA.format(pecas=pecas, total=total))
         if tentativa >= 2:
             partes.append(_direcao(diag.diferenca))
-        if tentativa >= 3:
-            partes.append(_acao(diag))
-
-    if tentativa >= 3:
-        partes.append(msg.LEMBRAR_ENUNCIADO)
+        else:
+            alvo_txt = formatar_valor_contextual(diag.esperado, diag.unidade_enunciado)
+            pedido = msg.PEDE_PECAS if diag.por_pecas else msg.PEDE_SOMA
+            partes.append(pedido.format(esperado=alvo_txt))
     return " ".join(p for p in partes if p)
 
 
@@ -271,9 +274,9 @@ def descrever_leitura(leitura: Leitura) -> str:
 def texto_leitura(ids_validos: list[int], total: int) -> str:
     """Texto que descreve, na tela, as peças que a câmera está vendo."""
     if not ids_validos:
-        return "Peças numéricas vistas pela câmera: nenhuma"
+        return "Peças vistas: nenhuma"
     partes = " + ".join(f"{ID_VALUES_MAP[i]}/8" for i in sorted(ids_validos))
-    texto = f"Peças numéricas vistas: {partes} = {total}/8"
+    texto = f"Peças vistas: {partes} = {total}/8"
     if total > TOTAL_OITAVOS:
         texto += " (mais que 1 inteiro)"
     elif total == TOTAL_OITAVOS:

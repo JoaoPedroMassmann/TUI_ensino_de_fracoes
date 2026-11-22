@@ -7,7 +7,6 @@ import time
 
 import cv2
 import numpy as np
-import tkinter as tk
 
 from . import config
 from . import mensagens as msg
@@ -17,7 +16,7 @@ from .deteccao import (
     DetectorBase,
     Estabilizador,
     EstabilizadorBase,
-    candidatos_base,
+    ids_na_base,
     criar_detector,
 )
 from .estado import Sessao
@@ -32,9 +31,11 @@ TECLAS_FASE = {str(k): k for k in FASES}
 
 TECLAS_AJUDA = (
     f"Teclas: [{FASE_MIN}-{FASE_MAX}] fases | [ESPAÇO] verificar/avançar | "
-    "[R] refazer | [P] repetir pergunta | [E] alternar exploração | "
-    "[H] ajuda | [Q] sair"
+    "[R] refazer | [S] pular | [M] menu | [P] repetir pergunta | [E] alternar exploração | "
+    "[C] calibrar a base | [ESC] silenciar | [H] ajuda | [Q] sair"
 )
+ESC = "\x1b"
+TECLAS_NA_CALIBRACAO = ("q", "h", "p", ESC)
 
 
 def abrir_camera() -> cv2.VideoCapture | None:
@@ -90,8 +91,36 @@ class Camera:
             self._cap = None
 
 
+class VigiaJanela:
+    """Detecta o fechamento da janela pelo X, que o imshow desfaria recriando a janela."""
+
+    def __init__(self) -> None:
+        self._ja_visivel = False
+
+    def fechada(self) -> bool:
+        visivel = cv2.getWindowProperty(config.JANELA_TITULO, cv2.WND_PROP_VISIBLE)
+        if visivel >= 1:
+            self._ja_visivel = True
+            return False
+        # Alguns backends devolvem -1 sempre: só vale como "fechada" depois de ter sido vista aberta.
+        return self._ja_visivel
+
+
+def destacar_candidata(display: np.ndarray, centro: tuple[int, int], raio: int) -> None:
+    """Contorno amarelo grosso no blob que a calibração usaria como peça base."""
+    amarelo = (0, 255, 255)
+    cv2.circle(display, centro, raio, amarelo, 4)
+    cv2.drawMarker(display, centro, amarelo, cv2.MARKER_CROSS, 30, 3)
+    cv2.putText(
+        display, "CANDIDATA A BASE", (centro[0] - raio, max(30, centro[1] - raio - 12)),
+        cv2.FONT_HERSHEY_SIMPLEX, 0.9, amarelo, 2, cv2.LINE_AA,
+    )
+
+
 def ler_tecla(codigo: int) -> str:
     """Tratamento de código de tecla para string. Devolve string vazia se não for uma tecla válida."""
+    # Só ASCII: teclas especiais (setas etc.) têm códigos fora de 0-127 e
+    # não podem ser mascaradas para virar caracteres.
     if not 0 <= codigo < 128:
         return ""
     return chr(codigo).lower()
@@ -117,21 +146,39 @@ def tratar_tecla(tecla: str, sessao: Sessao, leitura: Leitura) -> bool:
         return True
 
     sessao.falador.tocou_bipe = False
+    estado = sessao.estado
+    if estado.ajuda_visivel and tecla != "h":
+        estado.ajuda_visivel = False  # qualquer outra tecla fecha a lista e age normalmente
 
-    if sessao.estado.confirmando_saida:
+    if estado.confirmando_saida:
         if tecla == "q":
             sessao.falador.bipe("tecla")
             return False
         sessao.cancelar_confirmacao_saida()
         return True
 
-    if sessao.estado.calibrando and tecla not in ("q", "h", "p"):
+    if estado.acao_pendente is not None:
+        if tecla == estado.acao_pendente:
+            sessao.confirmar_acao()
+        else:
+            sessao.cancelar_acao_pendente()
+        if not sessao.falador.tocou_bipe:
+            sessao.falador.bipe("tecla")
+        return True
+
+    if estado.calibrando and tecla not in TECLAS_NA_CALIBRACAO:
         return True
 
     if tecla == "q":
         sessao.pedir_confirmacao_saida()
     elif tecla in TECLAS_FASE:
-        sessao.trocar_fase(TECLAS_FASE[tecla])
+        sessao.solicitar_fase(TECLAS_FASE[tecla])
+    elif tecla == "m":
+        sessao.solicitar_menu()
+    elif tecla == "s":
+        sessao.solicitar_pular()
+    elif tecla == ESC:
+        sessao.calar_fala()
     elif tecla == "e":
         sessao.alternar_exploracao()
     elif tecla == "r":
@@ -141,7 +188,7 @@ def tratar_tecla(tecla: str, sessao: Sessao, leitura: Leitura) -> bool:
     elif tecla == " ":
         sessao.verificar_ou_avancar(leitura)
     elif tecla == "h":
-        sessao.falar_ajuda()
+        sessao.alternar_ajuda()
     else:
         return True
 
@@ -181,12 +228,19 @@ def main() -> int:
     detector_base = DetectorBase()
     estabilizador_base = EstabilizadorBase()
     estabilizador_fora = EstabilizadorBase()
-    sessao.iniciar(calibrar=detector_base.ativo)
+    sessao.iniciar(calibrar=True)  # a calibração pode ser pulada com N
     logger.info(TECLAS_AJUDA)
 
     ids_anteriores: tuple[int, ...] = ()
+    vigia = VigiaJanela()
     ultimo_frame = np.zeros((config.CAMERA_ALTURA, config.CAMERA_LARGURA, 3), dtype=np.uint8)
     ultima_tecla, instante_tecla = "", 0.0
+
+    try:
+        cv2.namedWindow(config.JANELA_TITULO)
+        cv2.setWindowProperty(config.JANELA_TITULO, cv2.WND_PROP_TOPMOST, 1)
+    except (cv2.error, AttributeError):
+        pass  # sem suporte a "sempre no topo" neste sistema
 
     try:
         while True:
@@ -215,13 +269,16 @@ def main() -> int:
                         base_ok=False,
                     )
                     cv2.imshow(config.JANELA_TITULO, tela)
+                    if vigia.fechada():
+                        break
                 tecla, ultima_tecla, instante_tecla = filtrar_tecla(
                     ler_tecla(cv2.waitKey(30 if camera.caiu else 1)),
                     ultima_tecla,
                     instante_tecla,
                     time.monotonic(),
                 )
-                if tecla in (" ", "r", "n"):
+                # Sem câmera não há o que verificar: ignora comandos que dependem dela.
+                if tecla in (" ", "r", "n", "c"):
                     tecla = ""
                 if not tratar_tecla(tecla, sessao, Leitura([], base=False)):
                     break
@@ -232,52 +289,33 @@ def main() -> int:
             corners, ids, _ = detector.detectMarkers(gray)
             ids_detectados = ids.flatten().tolist() if ids is not None else []
 
-            ids_do_quadro = []
-            tem_pecas_fora_base = False
-
             display = frame.copy()
             if ids is not None:
                 cv2.aruco.drawDetectedMarkers(display, corners, ids)
 
+            if detector_base.ativo or sessao.estado.calibrando:
+                base_visivel = detector_base.medir(frame)
+            else:
+                base_visivel = True  # sem calibração a base não é detectada
             if detector_base.ativo:
-                candidatos = candidatos_base(frame)
-                minimo, maximo = detector_base._limites()
-                min_lado = min(frame.shape[:2])
-
-                base_centro = None
-                base_raio = None
-                for r, c, centro in candidatos:
-                    if minimo <= r <= maximo and c >= config.BASE_CIRCULARIDADE_MIN:
-                        base_centro = centro
-                        base_raio = int(r * min_lado)
-                        # Destaca visualmente a peça base detectada
-                        cv2.circle(display, centro, base_raio, (0, 255, 0), 2)
-                        cv2.circle(display, centro, 4, (0, 0, 255), -1)
-                        break
-
-                if ids is not None:
-                    for idx, marker_id in enumerate(ids.flatten()):
-                        if marker_id not in config.ID_VALUES_MAP:
-                            continue
-                        if base_centro is not None and base_raio is not None:
-                            pts = corners[idx][0]
-                            mx = np.mean(pts[:, 0])
-                            my = np.mean(pts[:, 1])
-
-                            dist = np.hypot(mx - base_centro[0], my - base_centro[1])
-                            if dist <= base_raio:
-                                ids_do_quadro.append(int(marker_id))
-                            else:
-                                tem_pecas_fora_base = True
-                        else:
-                            tem_pecas_fora_base = True
+                base = detector_base.base_atual(min(frame.shape[:2]))
+                ids_do_quadro, tem_pecas_fora_base = ids_na_base(ids, corners, base)
+                if base is not None and not sessao.estado.calibrando:
+                    cv2.circle(display, base[0], base[1], (0, 255, 0), 2)
+                    cv2.circle(display, base[0], 4, (0, 0, 255), -1)
             else:
                 ids_do_quadro = [i for i in ids_detectados if i in config.ID_VALUES_MAP]
+                tem_pecas_fora_base = False
+
+            candidata_vista = None
+            if sessao.estado.calibrando:
+                candidata = detector_base.candidata_calibracao(min(frame.shape[:2]))
+                candidata_vista = candidata is not None
+                if candidata is not None:
+                    destacar_candidata(display, *candidata)
 
             ids_validos = estabilizador.atualizar(ids_do_quadro)
-            base_ok = estabilizador_base.atualizar(
-                detector_base.medir(frame) if detector_base.ativo else True
-            )
+            base_ok = estabilizador_base.atualizar(base_visivel)
             fora_base_ok = estabilizador_fora.atualizar(tem_pecas_fora_base)
             leitura = Leitura(
                 ids_validos,
@@ -302,12 +340,20 @@ def main() -> int:
             if sessao.estado.calibrando:
                 if tecla == " ":
                     ha_pecas = any(i in config.ID_VALUES_MAP for i in ids_detectados)
-                    sessao.resultado_calibracao(detector_base.calibrar(frame, ha_pecas))
+                    codigo = detector_base.calibrar(frame, ha_pecas)
+                    sessao.resultado_calibracao(codigo)
+                    if codigo == "ok":  # leituras antigas foram feitas sem (ou com outra) base
+                        for e in (estabilizador, estabilizador_base, estabilizador_fora):
+                            e.limpar()
                     tecla = ""
                 elif tecla == "n":
-                    detector_base.ativo = False
-                    sessao.pular_calibracao()
+                    sessao.cancelar_calibracao(detector_base.ativo)
                     tecla = ""
+            elif tecla == "c" and not sessao.estado.confirmando_saida:
+                detector_base.limpar_medidas()
+                falador.bipe("info")
+                sessao.iniciar_calibracao()
+                tecla = ""
             if not tratar_tecla(tecla, sessao, leitura):
                 break
 
@@ -319,9 +365,12 @@ def main() -> int:
                 oscilando=leitura.oscilando,
                 camera_ok=True,
                 audio_ok=falador.saude_ok,
-                base_ok=base_ok,
+                base_ok=base_ok if detector_base.ativo else None,
+                candidata_base=candidata_vista,
             )
             cv2.imshow(config.JANELA_TITULO, display)
+            if vigia.fechada():
+                break
     finally:
         falador.parar()
         camera.liberar()

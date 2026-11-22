@@ -42,6 +42,9 @@ _PADROES_BIPE = {
 }
 
 
+_MAX_BIPES_PENDENTES = 6
+
+
 def _tocar_bipe(padrao: tuple[tuple[int, int], ...]) -> None:
     try:
         import winsound
@@ -76,6 +79,8 @@ class Falador:
         self._taxa = taxa
         self._dicas_voz = tuple(dicas_voz)
         self._fila: queue.Queue[tuple[int, str]] = queue.Queue()
+        self._fila_bipes: queue.Queue[tuple[tuple[int, int], ...]] = queue.Queue(maxsize=_MAX_BIPES_PENDENTES)
+        self._thread_bipes: threading.Thread | None = None
         self._lock = threading.Lock()
         self._processo: subprocess.Popen | None = None
         self._geracao = 0
@@ -108,13 +113,28 @@ class Falador:
         padrao = _PADROES_BIPE.get(tipo)
         if self._bipes and padrao:
             self.tocou_bipe = True
-            threading.Thread(target=_tocar_bipe, args=(padrao,), daemon=True).start()
+            if self._thread_bipes is None:
+                self._thread_bipes = threading.Thread(target=self._tocar_bipes, daemon=True)
+                self._thread_bipes.start()
+            try:
+                self._fila_bipes.put_nowait(padrao)
+            except queue.Full:
+                pass  # fila cheia: descarta em vez de acumular atraso
+
+    def _tocar_bipes(self) -> None:
+        """Um único consumidor: winsound.Beep é bloqueante e não tolera chamadas simultâneas."""
+        while True:
+            _tocar_bipe(self._fila_bipes.get())
 
     def parar(self) -> None:
         """Corta qualquer fala em andamento (usado ao sair do programa)."""
         with self._lock:
             self._geracao += 1
             self._terminar_processo()
+
+    def calar(self) -> None:
+        """Interrompe a fala atual e descarta as pendentes (tecla Escape)."""
+        self.parar()
 
     def _terminar_processo(self) -> None:
         if self._processo is not None and self._processo.poll() is None:

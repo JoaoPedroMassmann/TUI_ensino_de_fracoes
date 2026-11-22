@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import astuple
 from functools import cache
 
 import cv2
@@ -9,9 +10,19 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from . import config
+from . import mensagens as msg
 from .atividades import FASES
 from .avaliacao import texto_leitura
-from .estado import EstadoSistema
+from .estado import EstadoSistema, modo_ajuda
+
+Bloco = tuple[str, ImageFont.ImageFont, tuple[int, int, int]]
+
+# Fatores de redução da fonte da mensagem quando ela não cabe entre os painéis.
+_FATORES_MENSAGEM = (1.0, 0.85, 0.7, 0.6, 0.5)
+
+# Última camada de interface desenhada: (chave, 1 - alfa, cor pré-multiplicada em BGR).
+# O texto só é redesenhado quando algo na tela muda, não a cada quadro.
+_cache: tuple[tuple, np.ndarray, np.ndarray] | None = None
 
 
 @cache
@@ -43,23 +54,31 @@ def altura_linha(fonte) -> int:
     return fonte.getbbox("Ágy")[3] + 8
 
 
-def desenhar_painel(
-    draw: ImageDraw.ImageDraw,
-    x: int,
-    y: int,
-    largura: int,
-    blocos: list[tuple[str, ImageFont.ImageFont, tuple[int, int, int]]],
-    borda: tuple[int, int, int] | None = None,
-    base: int | None = None,
-    escala: float = 1.0,
-) -> tuple[int, int]:
-    """Desenha um painel de texto. Se `base` for dado, o painel termina nessa altura."""
+def _preparar_painel(
+    draw: ImageDraw.ImageDraw, largura: int, blocos: list[Bloco], escala: float
+) -> tuple[list[tuple[str, ImageFont.ImageFont, tuple[int, int, int]]], int, int]:
+    """Quebra o texto em linhas e devolve (linhas, margem interna, altura do painel)."""
     margem_interna = int(14 * escala)
     linhas = []
     for texto, fonte, cor in blocos:
         for linha in quebrar_linhas(draw, texto, fonte, largura - 2 * margem_interna):
             linhas.append((linha, fonte, cor))
     altura = 2 * margem_interna + sum(altura_linha(f) for _, f, _ in linhas)
+    return linhas, margem_interna, altura
+
+
+def desenhar_painel(
+    draw: ImageDraw.ImageDraw,
+    x: int,
+    y: int,
+    largura: int,
+    blocos: list[Bloco],
+    borda: tuple[int, int, int] | None = None,
+    base: int | None = None,
+    escala: float = 1.0,
+) -> tuple[int, int]:
+    """Desenha um painel de texto. Se `base` for dado, o painel termina nessa altura."""
+    linhas, margem_interna, altura = _preparar_painel(draw, largura, blocos, escala)
     if base is not None:
         y = base - altura
 
@@ -75,24 +94,41 @@ def desenhar_painel(
     return y, y + altura
 
 
-def desenhar_interface(
-    frame: np.ndarray,
+def texto_atalhos(estado: EstadoSistema) -> str:
+    """Só as teclas do momento (2 ou 3); a lista completa abre com H."""
+    if estado.ajuda_visivel:
+        return "[H] Fechar    [ESC] Fechar e silenciar"
+    if estado.confirmando_saida:
+        return "[Q] Confirmar saída    [outra tecla] Cancelar"
+    if estado.acao_pendente is not None:
+        return f"[{estado.acao_pendente.upper()}] Confirmar    [outra tecla] Cancelar"
+    if estado.calibrando:
+        return "[ESPAÇO] Calibrar    [N] Pular    [H] Ajuda"
+    if estado.exploracao:
+        return "[ESPAÇO] Ler peças    [E] Voltar    [H] Ajuda"
+    if estado.menu:
+        return f"[1-{max(FASES)}] Fase    [ESPAÇO] Começar    [H] Ajuda"
+    acao = "Próxima atividade" if estado.resolvida else "Continuar" if estado.troca else "Verificar"
+    return f"[ESPAÇO] {acao}    [P] Repetir    [H] Ajuda"
+
+
+def _montar_camada(
+    w: int,
+    h: int,
     estado: EstadoSistema,
     ids_validos: list[int],
     total: int,
-    *,
-    oscilando: bool = False,
-    camera_ok: bool = True,
-    audio_ok: bool = True,
-    erro_fatal: str | None = None,
-    base_ok: bool = False,
-) -> np.ndarray:
-    h, w = frame.shape[:2]
+    oscilando: bool,
+    camera_ok: bool,
+    audio_ok: bool,
+    erro_fatal: str | None,
+    base_ok: bool | None,
+    candidata_base: bool | None,
+) -> Image.Image:
     escala = max(0.6, w / 1280)
     fontes = {k: get_font(max(12, int(v * escala))) for k, v in config.TAMANHOS_FONTE.items()}
 
-    base = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)).convert("RGBA")
-    camada = Image.new("RGBA", base.size, (0, 0, 0, 0))
+    camada = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     draw = ImageDraw.Draw(camada)
 
     margem = int(24 * escala)
@@ -112,99 +148,53 @@ def desenhar_interface(
             borda=config.VERMELHO,
             escala=escala,
         )
-        saida = Image.alpha_composite(base, camada).convert("RGB")
-        return cv2.cvtColor(np.array(saida), cv2.COLOR_RGB2BGR)
+        return camada
 
     fase = estado.fase_atual
-    etapa_texto = f" (Etapa {estado.etapa_atual}/2)" if estado.questao.duas_etapas else ""
+    # Status normal fica oculto: só aparece quando há problema.
+    problemas = [t for ok, t in ((camera_ok, "Câmera com erro"), (audio_ok, "Sem áudio")) if not ok]
+    status = "  ·  ".join(problemas)
+    cor_status = config.AMARELO if problemas else config.CINZA
+    sufixo_status = f"  ·  {status}" if status else ""
+
+    etapa_texto = f"  ·  Etapa {estado.etapa_atual}/2" if estado.questao.duas_etapas else ""
     if estado.troca:
-        etapa_texto = " (troca de peça base)"
-    tentativa_texto = (
-        f"  |  Tentativas anteriores: {estado.tentativas}" if estado.tentativas > 0 else ""
-    )
-    status_cam = "Câmera: OK" if camera_ok else "Câmera: ERRO"
-    status_som = "Áudio: OK" if audio_ok else "Sem áudio"
+        etapa_texto = "  ·  Troca da peça base"
+    tentativa_texto = f"  ·  Tentativa {estado.tentativas + 1}" if estado.tentativas > 0 else ""
     cabecalho = (
-        f"Atividade {estado.questao_atual + 1} de {len(fase.questoes)}"
-        f"{etapa_texto}{tentativa_texto}  |  {status_cam}  |  {status_som}"
+        f"Atividade {estado.questao_atual + 1}/{len(fase.questoes)}"
+        f"{etapa_texto}{tentativa_texto}{sufixo_status}"
     )
 
     blocos = [
         (fase.titulo, fontes["titulo"], config.AMARELO),
-        (cabecalho, fontes["pequeno"], config.CINZA if audio_ok else config.AMARELO),
+        (cabecalho, fontes["pequeno"], cor_status),
         (estado.enunciado_atual, fontes["enunciado"], config.BRANCO),
     ]
-    if estado.calibrando:
-        blocos = [
-            ("Calibração da peça base", fontes["titulo"], config.AMARELO),
-            (f"{status_cam}  |  {status_som}", fontes["pequeno"],
-             config.CINZA if audio_ok else config.AMARELO),
-            ("Peça base sozinha, sem peças numéricas, sobre fundo claro. "
-             "Aperte espaço para calibrar.", fontes["enunciado"], config.BRANCO),
-        ]
     if estado.menu:
         blocos = [
             ("Sistema Educativo de Frações", fontes["titulo"], config.AMARELO),
-            (
-                f"{status_cam}  |  {status_som}",
-                fontes["pequeno"],
-                config.CINZA if audio_ok else config.AMARELO,
-            ),
-            (
-                "Escolha a fase ou aperte espaço para começar pela fase 1:",
-                fontes["enunciado"],
-                config.BRANCO,
-            ),
+            *([(status, fontes["pequeno"], config.AMARELO)] if status else []),
+            (f"Escolha a fase (1-{max(FASES)}) ou aperte espaço:", fontes["enunciado"], config.BRANCO),
             *[(f.titulo, fontes["pequeno"], config.BRANCO) for f in FASES.values()],
         ]
     if estado.exploracao:
         blocos = [
-            (f"Modo Exploração  |  {status_cam}  |  {status_som}", fontes["titulo"], config.AMARELO),
-            (
-                "Encaixe peças numéricas na peça base e aperte espaço para ouvir o que foi identificado.",
-                fontes["enunciado"],
-                config.BRANCO,
-            ),
+            (f"Modo Exploração{sufixo_status}", fontes["titulo"], config.AMARELO),
+            ("Encaixe peças na base e aperte espaço para ouvir a leitura.",
+             fontes["enunciado"], config.BRANCO),
         ]
-    _, y = desenhar_painel(draw, margem, margem, largura, blocos, escala=escala)
+    if estado.calibrando:
+        blocos = [
+            (f"Calibração da peça base{sufixo_status}", fontes["titulo"], config.AMARELO),
+            ("Base sozinha, sobre fundo claro. Espaço calibra, N pula.",
+             fontes["enunciado"], config.BRANCO),
+        ]
+    _, y_cabecalho = desenhar_painel(draw, margem, margem, largura, blocos, escala=escala)
 
-    blocos = []
-    if estado.rotulo:
-        blocos.append((estado.rotulo, fontes["tag"], estado.cor))
-    blocos.append((estado.mensagem, fontes["mensagem"], config.BRANCO))
-    desenhar_painel(
-        draw,
-        margem,
-        y + gap,
-        largura,
-        blocos,
-        borda=estado.cor if estado.rotulo else config.CINZA,
-        escala=escala,
-    )
-
-    fase_min, fase_max = min(FASES), max(FASES)
-    acao = "Próxima atividade" if estado.resolvida else "Continuar" if estado.troca else "Verificar"
-    if estado.exploracao:
-        atalhos = (
-            f"[ESPAÇO] Ler peças    [P] Repetir instrução    [E] Sair do modo explorar    "
-            f"[{fase_min}-{fase_max}] Fases    [H] Ajuda    [Q] Sair"
-        )
-    elif estado.calibrando:
-        atalhos = (
-            "[ESPAÇO] Calibrar    [N] Continuar sem detectar a base    "
-            "[P] Repetir instruções    [H] Ajuda    [Q] Sair"
-        )
-    elif estado.menu:
-        atalhos = (
-            f"[ESPAÇO] Começar na fase 1    [{fase_min}-{fase_max}] Escolher fase    "
-            "[P] Repetir instruções    [E] Explorar    [H] Ajuda    [Q] Sair"
-        )
-    else:
-        atalhos = (
-            f"[ESPAÇO] {acao}    [R] Refazer    [P] Repetir pergunta    [E] Explorar    "
-            f"[{fase_min}-{fase_max}] Fases    [H] Ajuda    [Q] Sair"
-        )
-    topo, _ = desenhar_painel(
+    # Painéis de baixo primeiro: o que sobra entre eles e o cabeçalho é o espaço da mensagem.
+    atalhos = texto_atalhos(estado)
+    topo_atalhos, _ = desenhar_painel(
         draw,
         margem,
         0,
@@ -217,22 +207,110 @@ def desenhar_interface(
     blocos_leitura = [(texto_leitura(ids_validos, total), fontes["leitura"], config.BRANCO)]
     if oscilando:
         blocos_leitura.append(
-            ("Leitura oscilando — mantenha as peças paradas.", fontes["pequeno"], config.AMARELO)
+            ("Leitura oscilando: peças paradas.", fontes["pequeno"], config.AMARELO)
         )
-    if base_ok is not None:
+    if estado.calibrando and candidata_base is not None:
         blocos_leitura.append(
-            (f"Peça base: {'vista' if base_ok else 'não vista'}", fontes["pequeno"],
-             config.CINZA if base_ok else config.AMARELO)
+            (f"Candidata à peça base: {'vista (contorno amarelo)' if candidata_base else 'não vista'}",
+             fontes["pequeno"], config.VERDE if candidata_base else config.AMARELO)
         )
-    desenhar_painel(
+    elif base_ok is None:
+        blocos_leitura.append(
+            ("Base não calibrada (C calibra)",
+             fontes["pequeno"], config.CINZA)
+        )
+    elif not base_ok:
+        blocos_leitura.append(("Peça base não vista", fontes["pequeno"], config.AMARELO))
+    topo_leitura, _ = desenhar_painel(
         draw,
         margem,
         0,
         largura,
         blocos_leitura,
-        base=topo - gap,
+        base=topo_atalhos - gap,
         escala=escala,
     )
 
-    saida = Image.alpha_composite(base, camada).convert("RGB")
-    return cv2.cvtColor(np.array(saida), cv2.COLOR_RGB2BGR)
+    # Mensagem: reduz a fonte até caber no espaço livre entre cabeçalho e leitura.
+    topo_msg = y_cabecalho + gap
+    espaco = topo_leitura - gap - topo_msg
+    largura_msg = largura
+    blocos_dir: list[Bloco] = []
+    if estado.ajuda_visivel:
+        # Lista em duas colunas (painéis lado a lado) para caber com fonte maior.
+        linhas_ajuda = msg.comandos_tela(modo_ajuda(estado), min(FASES), max(FASES))
+        corte = (len(linhas_ajuda) + 1) // 2
+        esquerda, direita = linhas_ajuda[:corte], linhas_ajuda[corte:]
+        largura_msg = largura // 2 - gap // 2
+        borda_msg = config.AMARELO
+
+        def montar(fonte):
+            return [("COMANDOS", fontes["tag"], config.AMARELO),
+                    *[(linha, fonte, config.BRANCO) for linha in esquerda]]
+
+        def montar_direita(fonte):
+            return [("COMANDOS (cont.)", fontes["tag"], config.AMARELO),
+                    *[(linha, fonte, config.BRANCO) for linha in direita]]
+    else:
+        rotulo = [(estado.rotulo, fontes["tag"], estado.cor)] if estado.rotulo else []
+        borda_msg = estado.cor if estado.rotulo else config.CINZA
+
+        def montar(fonte):
+            return [*rotulo, (estado.mensagem, fonte, config.BRANCO)]
+
+        montar_direita = None
+
+    for fator in _FATORES_MENSAGEM:
+        fonte_msg = get_font(max(12, int(config.TAMANHOS_FONTE["mensagem"] * escala * fator)))
+        blocos_msg = montar(fonte_msg)
+        if _preparar_painel(draw, largura_msg, blocos_msg, escala)[2] <= espaco:
+            break
+    desenhar_painel(
+        draw, margem, topo_msg, largura_msg, blocos_msg, borda=borda_msg, escala=escala
+    )
+    if montar_direita is not None:
+        desenhar_painel(
+            draw, margem + largura - largura_msg, topo_msg, largura_msg,
+            montar_direita(fonte_msg), borda=borda_msg, escala=escala,
+        )
+    return camada
+
+
+def _camada_em_cache(chave: tuple, camada_fn) -> tuple[np.ndarray, np.ndarray]:
+    global _cache
+    if _cache is None or _cache[0] != chave:
+        rgba = np.asarray(camada_fn(), dtype=np.float32)
+        alfa = rgba[..., 3:4] / 255.0
+        _cache = (chave, 1.0 - alfa, rgba[..., 2::-1] * alfa)  # cor já em BGR
+    return _cache[1], _cache[2]
+
+
+def desenhar_interface(
+    frame: np.ndarray,
+    estado: EstadoSistema,
+    ids_validos: list[int],
+    total: int,
+    *,
+    oscilando: bool = False,
+    camera_ok: bool = True,
+    audio_ok: bool = True,
+    erro_fatal: str | None = None,
+    base_ok: bool | None = False,
+    candidata_base: bool | None = None,
+) -> np.ndarray:
+    """`base_ok` é None quando a detecção da peça base está desativada."""
+    h, w = frame.shape[:2]
+    chave = (
+        w, h, astuple(estado), tuple(ids_validos), total,
+        oscilando, camera_ok, audio_ok, erro_fatal, base_ok,
+        candidata_base,
+    )
+    inverso_alfa, cor_pre = _camada_em_cache(
+        chave,
+        lambda: _montar_camada(
+            w, h, estado, ids_validos, total, oscilando, camera_ok, audio_ok, erro_fatal, base_ok,
+            candidata_base,
+        ),
+    )
+    saida = frame.astype(np.float32) * inverso_alfa + cor_pre
+    return saida.astype(np.uint8)
