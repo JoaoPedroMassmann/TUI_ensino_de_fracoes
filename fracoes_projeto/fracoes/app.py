@@ -48,14 +48,36 @@ def abrir_camera() -> cv2.VideoCapture | None:
     return cap
 
 
-class Camera:
-    """Leitura de quadros com detecção de falhas e reconexão automática."""
+def contar_cameras() -> int:
+    """Quantos índices de câmera abrem agora. Só chamar com a câmera principal fechada."""
+    total = 0
+    for indice in range(config.CAMERA_BUSCA_MAX):
+        cap = cv2.VideoCapture(indice)
+        if cap.isOpened():
+            total += 1
+        cap.release()
+    return total
 
-    def __init__(self, cap: cv2.VideoCapture) -> None:
+
+def resolucao(cap: cv2.VideoCapture) -> tuple[int, int]:
+    return int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+
+class Camera:
+    """Leitura de quadros com detecção de falhas e reconexão automática.
+
+    Com `n_cameras`, a reconexão recusa a câmera que assumir o índice quando a externa cai
+    (por exemplo, a do notebook): só aceita quando voltam a existir `n_cameras` câmeras
+    e a resolução é a mesma da câmera original.
+    """
+
+    def __init__(self, cap: cv2.VideoCapture, n_cameras: int | None = None) -> None:
         self._cap: cv2.VideoCapture | None = cap
         self._falhas = 0
         self._proxima = 0.0
         self.caiu = False
+        self._n_cameras = n_cameras
+        self._resolucao = resolucao(cap) if n_cameras is not None else None
 
     def ler(self) -> tuple[np.ndarray | None, str | None]:
         """Devolve (quadro, evento); evento é 'caiu', 'voltou' ou None."""
@@ -78,7 +100,15 @@ class Camera:
         agora = time.monotonic()
         if agora < self._proxima:
             return None
+        if self._n_cameras is not None and contar_cameras() < self._n_cameras:
+            logger.info("Reconexão adiada: a câmera original ainda não voltou.")
+            self._proxima = agora + config.INTERVALO_RECONEXAO
+            return None
         self._cap = abrir_camera()
+        if self._cap is not None and self._resolucao is not None and resolucao(self._cap) != self._resolucao:
+            logger.info("Reconexão recusada: a câmera aberta não é a original (resolução diferente).")
+            self._cap.release()
+            self._cap = None
         if self._cap is None:
             self._proxima = agora + config.INTERVALO_RECONEXAO
             return None
@@ -212,6 +242,8 @@ def main() -> int:
     falador = Falador(habilitado=tem_audio)
     falador.iniciar()
 
+    # Conta as câmeras antes de abrir a principal: abrir o mesmo índice duas vezes falha em alguns sistemas.
+    n_cameras = contar_cameras() if config.CAMERA_EXIGIR_MESMA else None
     cap = abrir_camera()
     if cap is None:
         logger.error("Erro: Não foi possível abrir a câmera.")
@@ -220,7 +252,7 @@ def main() -> int:
         time.sleep(3)
         falador.parar()
         return 1
-    camera = Camera(cap)
+    camera = Camera(cap, n_cameras)
 
     detector = criar_detector()
     estabilizador = Estabilizador()

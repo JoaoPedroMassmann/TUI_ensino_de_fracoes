@@ -274,9 +274,9 @@ def descrever_leitura(leitura: Leitura) -> str:
 def texto_leitura(ids_validos: list[int], total: int) -> str:
     """Texto que descreve, na tela, as peças que a câmera está vendo."""
     if not ids_validos:
-        return "Peças vistas: nenhuma"
+        return "Peças numéricas vistas: nenhuma"
     partes = " + ".join(f"{ID_VALUES_MAP[i]}/8" for i in sorted(ids_validos))
-    texto = f"Peças vistas: {partes} = {total}/8"
+    texto = f"Peças numéricas vistas: {partes} = {total}/8"
     if total > TOTAL_OITAVOS:
         texto += " (mais que 1 inteiro)"
     elif total == TOTAL_OITAVOS:

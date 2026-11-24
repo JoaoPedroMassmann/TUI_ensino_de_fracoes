@@ -152,6 +152,7 @@ Tudo em `config.py`:
 | `TTS_TAXA` | 160 | Velocidade da fala |
 | `TTS_VOZ_DICAS` | pt-br… | Trechos para escolher a voz em português |
 | `FALHAS_CAMERA_MAX` / `INTERVALO_RECONEXAO` | 15 / 2 s | Detecção de queda e reconexão |
+| `CAMERA_EXIGIR_MESMA` / `CAMERA_BUSCA_MAX` | `True` / 4 | Impede que a câmera do notebook assuma o lugar da externa na reconexão |
 
 ## Estrutura do código
 
@@ -189,12 +190,10 @@ python -m unittest discover -s fracoes/tests -t .
 | "Leitura oscilando" | Luz fraca, marcador coberto pela mão ou impresso com baixa qualidade |
 | "Não vejo peças numéricas" com peça na mesa | Marcador com ID errado, virado para baixo ou fora da base (com a detecção ativa) |
 | Detecção da base falha depois de mover a câmera | Calibre de novo com **C** |
+| Câmera externa cai e o sistema não reconecta | Ele só reconecta quando o número de câmeras volta ao da abertura. Reconecte o cabo; se a câmera voltar em outro índice, ajuste `CAMERA_INDEX` |
 
 ## Limitações conhecidas
 
 - Marcadores com IDs diferentes de 10, 20 e 30 são ignorados sem aviso; uma peça com a tag errada aparece como "não vejo peças".
 - Sem calibração, a detecção da base fica desligada e não há verificação de peças fora dela.
-- O sistema não detecta a perda de foco do teclado. A pista é a falta de bipe.
-- Cada frase falada abre um processo do `pyttsx3`, o que pode causar um atraso curto antes da voz.
 - Fora do Windows, todos os bipes soam iguais.
-- O desenvolvimento foi validado com testes automáticos e simulação de câmera; o comportamento com câmera, voz e peças reais precisa ser conferido em campo.
