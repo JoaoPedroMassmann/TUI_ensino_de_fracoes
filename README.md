@@ -11,13 +11,12 @@ O sistema foi pensado para uso com forte apoio de áudio: tudo o que aparece na 
 3. [Como executar](#como-executar)
 4. [Uso: instrutor e aluno](#uso-instrutor-e-aluno)
 5. [Comandos](#comandos)
-6. [As fases](#as-fases)
-7. [Como a avaliação funciona](#como-a-avaliação-funciona)
-8. [Configuração](#configuração)
-9. [Estrutura do código](#estrutura-do-código)
-10. [Testes](#testes)
-11. [Solução de problemas](#solução-de-problemas)
-12. [Limitações conhecidas](#limitações-conhecidas)
+6. [Como a avaliação funciona](#como-a-avaliação-funciona)
+7. [Configuração](#configuração)
+8. [Estrutura do código](#estrutura-do-código)
+9. [Testes](#testes)
+10. [Solução de problemas](#solução-de-problemas)
+11. [Limitações conhecidas](#limitações-conhecidas)
 
 ## Requisitos
 
@@ -33,7 +32,7 @@ O sistema foi pensado para uso com forte apoio de áudio: tudo o que aparece na 
 pip install opencv-python numpy Pillow pyttsx3
 ```
 
-Sistema operacional: desenvolvido para **Windows** (bipes com `winsound`, voz do Windows). Em Linux e macOS funciona, mas todos os bipes viram o mesmo sinal do terminal, perdendo a diferença entre acerto, erro e aviso. Para a voz, o `pyttsx3` precisa de um motor instalado (por exemplo `espeak` no Linux), de preferência com voz em português do Brasil.
+Sistema operacional: desenvolvido para **Windows** (bipes com `winsound`, voz do Windows), não sendo testado em outros sistemas operacionasi. Em Linux e macOS, os bipes diferenciados por tipo não funcionam, com todos os bipes virando o mesmo sinal do terminal. Para a voz, o `pyttsx3` precisa de um motor instalado (por exemplo `espeak` no Linux), de preferência com voz em português do Brasil.
 
 ## Material físico
 
@@ -71,7 +70,7 @@ A janela "Sistema Educativo de Frações" abre. Ela precisa estar em **foco** pa
 
 **2. Menu.** Depois da calibração, o sistema fala as boas-vindas. ESPAÇO começa pela fase 1; as teclas **1 a 6** escolhem a fase.
 
-**3. Atividade.** O sistema fala a atividade. O aluno encaixa as peças e aperta **ESPAÇO** para verificar. Se acertar, ESPAÇO avança para a próxima atividade. Se errar, recebe uma dica que muda a cada tentativa.
+**3. Atividade.** O sistema fala a atividade. O aluno encaixa as peças e aperta **ESPAÇO** para verificar. Se acertar, ESPAÇO avança para a próxima atividade. Se errar, recebe uma dica por feedback progressivo.
 
 **4. Troca de peça base (fase 6).** Quando a primeira etapa está certa, o sistema pede ao instrutor que retire a peça base e as peças, posicione a segunda base e aperte ESPAÇO para continuar.
 
@@ -102,14 +101,14 @@ A tela mostra só as teclas do momento. A lista completa do modo atual abre com 
 
 | Fase | Tema |
 |---|---|
-| 1 | Frações unitárias: um oitavo, um quarto, um meio |
-| 2 | Formar o inteiro com peças iguais |
-| 3 | Números como frações (metade, o inteiro) |
+| 1 | Frações unitárias |
+| 2 | Formar o inteiro |
+| 3 | Números fracionários  |
 | 4 | Frações equivalentes |
-| 5 | Parte e todo (situações do dia a dia) |
-| 6 | Equivalência em duas peças base (com troca de base) |
+| 5 | Parte e todo |
+| 6 | Frações equivalentes com duas peças base |
 
-Cada fase tem de 3 a 4 atividades. As atividades são definidas em `atividades.py`. Há dois critérios de resposta:
+Cada fase tem de 3. As atividades são definidas em `atividades.py`. Há dois critérios de resposta:
 
 - **Peças exatas** (`ids_obrigatorios`): a montagem deve usar exatamente aquelas peças.
 - **Soma alvo** (`soma_alvo`): vale qualquer combinação que some o valor em oitavos.
@@ -136,7 +135,7 @@ Quando o valor está certo mas as peças são outras, o sistema explica a equiva
 
 ## Configuração
 
-Tudo em `config.py`:
+Valore disponíveis em `config.py`:
 
 | Parâmetro | Padrão | Função |
 |---|---|---|
@@ -168,16 +167,6 @@ Tudo em `config.py`:
 | `interface.py` | Desenho da interface sobre o quadro da câmera |
 | `fala.py` | Voz (`pyttsx3`) e bipes |
 
-**Texto.** As mensagens seguem um orçamento de tamanho (enunciados até 80 caracteres, feedback até 120, ajuda falada até 250, barra de atalhos até 60). Os limites são verificados por testes, então ao mudar um texto rode os testes.
-
-## Testes
-
-Os testes cobrem a lógica sem câmera nem áudio: avaliação, fluxo das fases (incluindo a troca de base), confirmações, calibração, ajuda e orçamento de texto. Rode a partir da **pasta que contém o pacote** (não de dentro dele):
-
-```bash
-python -m unittest discover -s fracoes/tests -t .
-```
-
 ## Solução de problemas
 
 | Sintoma | O que verificar |
@@ -186,14 +175,14 @@ python -m unittest discover -s fracoes/tests -t .
 | Tecla sem bipe | A janela perdeu o foco: clique nela |
 | "Sem áudio" na tela | `pyttsx3` não instalado ou sem voz no sistema |
 | Calibração diz "não vejo a peça base" | Base sozinha, centralizada, bem iluminada, com tamanho dentro da faixa (`BASE_RAIO_MIN`/`MAX`); confira o contorno amarelo |
-| Calibração diz "fundo escuro demais" | Use uma superfície clara |
+| Calibração diz "fundo escuro demais" | Use uma superfície clara como plano de fundo |
 | "Leitura oscilando" | Luz fraca, marcador coberto pela mão ou impresso com baixa qualidade |
-| "Não vejo peças numéricas" com peça na mesa | Marcador com ID errado, virado para baixo ou fora da base (com a detecção ativa) |
+| "Não vejo peças numéricas" com peça na mesa | Marcador com ID errado ou fora da base (com a detecção ativa) |
 | Detecção da base falha depois de mover a câmera | Calibre de novo com **C** |
 | Câmera externa cai e o sistema não reconecta | Ele só reconecta quando o número de câmeras volta ao da abertura. Reconecte o cabo; se a câmera voltar em outro índice, ajuste `CAMERA_INDEX` |
 
 ## Limitações conhecidas
 
 - Marcadores com IDs diferentes de 10, 20 e 30 são ignorados sem aviso; uma peça com a tag errada aparece como "não vejo peças".
-- Sem calibração, a detecção da base fica desligada e não há verificação de peças fora dela.
-- Fora do Windows, todos os bipes soam iguais.
+- Sem calibração, a detecção da base fica desligada e não há verificação se as peças estão fora dela.
+- O sistema não foi testado em outros sistemas operacionais além do Windows, algumas funções, como os bipes de tipos diferentes, podem não funcionar corretamente.
