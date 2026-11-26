@@ -301,15 +301,15 @@ def main() -> int:
                         base_ok=False,
                     )
                     cv2.imshow(config.JANELA_TITULO, tela)
-                    if vigia.fechada():
-                        break
                 tecla, ultima_tecla, instante_tecla = filtrar_tecla(
                     ler_tecla(cv2.waitKey(30 if camera.caiu else 1)),
                     ultima_tecla,
                     instante_tecla,
                     time.monotonic(),
                 )
-                # Sem câmera não há o que verificar: ignora comandos que dependem dela.
+                if vigia.fechada():
+                    break
+                # Sem câmera, ignora comandos que dependem dela.
                 if tecla in (" ", "r", "n", "c"):
                     tecla = ""
                 if not tratar_tecla(tecla, sessao, Leitura([], base=False)):
@@ -369,6 +369,8 @@ def main() -> int:
                 instante_tecla,
                 time.monotonic(),
             )
+            if vigia.fechada():
+                break
             if sessao.estado.calibrando:
                 if tecla == " ":
                     ha_pecas = any(i in config.ID_VALUES_MAP for i in ids_detectados)
